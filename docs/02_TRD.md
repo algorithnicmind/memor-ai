@@ -1,45 +1,49 @@
 # Technical Requirements Document (TRD)
 
 ## 1. System Overview
-Memorai is a decoupled application separating the memory engine from the LLM generation process. The backend orchestrates memory extraction, storage, and retrieval before constructing a context prompt for the LLM.
+Memorai is an advanced AI chat application that solves memory loss between conversations using a dual-memory architecture combining Vector-based semantic memory and Knowledge graph storage.
 
 ## 2. Technology Stack
 
-### 2.1. Frontend
-- **Framework**: Next.js (React)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **State Management**: React Context / Zustand (as needed)
+### 2.1. Frontend Technologies
+- **Framework**: Next.js 16.1.1 (App Router, SSR)
+- **React**: React 19.2.3 (Concurrent features)
+- **Language**: TypeScript ^5
+- **Styling**: Tailwind CSS ^4, `@tailwindcss/typography`
+- **Animations**: Motion (Framer Motion) 12.23.26
+- **UI Components**: Radix UI (Accessible primitives), Lucide React 0.562.0 (Icons)
+- **Content Rendering**: `react-markdown` 10.1.0, `remark-gfm`
 
-### 2.2. Backend API
-- **Framework**: FastAPI (Python)
-- **Data Validation**: Pydantic
-- **API Architecture**: RESTful endpoints
+### 2.2. Backend Technologies
+- **Framework**: FastAPI (Python >= 3.12)
+- **Server**: Uvicorn >= 0.34.0
+- **Validation**: Pydantic >= 2.10.0
+- **Serialization**: `msgspec` >= 0.20.0
 
-### 2.3. Memory & Database Layer
-- **Relational DB**: SQLite (for Users, Conversations, Messages, Memory metadata)
-- **Vector DB**: ChromaDB / Qdrant / FAISS (for embedding storage and semantic search)
-- **Graph DB**: Kuzu (for entity-relationship mapping)
+### 2.3. AI & Machine Learning Services
+- **Chat LLM**: Mistral AI (via `openai` SDK >= 2.14.0)
+- **Embeddings**: Google Gemini (`google-genai` >= 1.56.0) using `text-embedding-004` (768-dimensional vectors)
+- **Text Ranking**: `rank-bm25` >= 0.2.2 (Re-ranks graph search results)
 
-### 2.4. AI & Machine Learning
-- **Offline/Local Mode**:
-  - LLM: Local models via Ollama / Llama.cpp (e.g., Llama 3 8B, Mistral)
-  - Embeddings: Local models (e.g., all-MiniLM-L6-v2)
-- **Online/Cloud Mode**:
-  - LLM: Mistral API / Gemini API
-  - Embeddings: Cloud embedding endpoints
+### 2.4. Database & Storage Layer (Embedded Architecture)
+- **Vector Storage**: **SQLite** (via `aiosqlite` >= 0.22.1). Uses custom cosine similarity. Implements a relevance threshold filtering (default 0.5) to eliminate noise and supports metadata-based filtering (user_id, agent_id, run_id).
+- **Graph Storage**: **Kuzu** >= 0.11.3. Embedded graph database for storing entity relationships natively in-process.
 
-## 3. Core Functional Requirements
-- **Authentication**: Secure JWT/session-based authentication to isolate user memories.
-- **Memory Extraction Pipeline**: NLP/LLM-based pipeline to classify and extract JSON objects from text.
-- **Scoring Engine**: Algorithm to rank memories based on Semantic Similarity, Importance, Recency, Relationship Strength, and Confidence.
+## 3. UI/UX Highlights
+- Modern **Glass Morphism Design** with subtle gradients.
+- **Dark/Light Theme Toggle** using `next-themes`.
+- **Smooth Animations** powered by Motion.
+- **Memory Badges** showing which memories influenced responses.
+- **Typing Indicators** with animated dots.
+- **Markdown Support** with syntax highlighting.
 
-## 4. Non-Functional Requirements
-- **Latency**: Memory retrieval and context building should add <500ms to the LLM response time.
-- **Privacy**: User data must be strictly isolated. Local mode must not send data to external APIs.
-- **Hardware Constraints (Local Mode)**: Must run on a machine with an RTX 2050 4GB + 16GB RAM.
+## 4. Performance Characteristics
+- **Message + Memory Search**: ~500ms (Parallel embedding + search)
+- **Memory Addition**: ~300ms (Async fact extraction)
+- **Graph Search**: ~100ms (BM25 re-ranking)
+- **Embedding Generation**: ~50ms (Gemini API call)
 
-## 5. Security & Access Control
-- Passwords must be hashed (bcrypt).
-- API routes must be protected via authentication middleware.
-- Users can only read/write/delete their own memories (`user_id` filtering).
+## 5. Security & Privacy
+- **User Isolation**: Memories strictly filtered by `user_id`.
+- **Local Storage**: All data stored locally using embedded SQLite and Kuzu.
+- **Session-based Auth**: Password protection with cookie-based sessions.
