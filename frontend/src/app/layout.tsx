@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+<<<<<<< HEAD
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -24,6 +25,38 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
+=======
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "Memorai - AI That Remembers You",
+  description: "An AI assistant with persistent memory that evolves with you",
+  keywords: ["AI", "chatbot", "memory", "personalized", "assistant"],
+  authors: [{ name: "Memorai Team" }],
+  openGraph: {
+    title: "Memorai - AI That Remembers You",
+    description: "An AI assistant with persistent memory that evolves with you",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" className="dark">
+      <body className={`${inter.className} antialiased`}>
+        {children}
+      </body>
+>>>>>>> b9f5e7db42516df84d24b675dc73685daac6df49
     </html>
   );
 }
