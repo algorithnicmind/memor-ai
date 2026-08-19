@@ -1,62 +1,71 @@
-# High-Level Design (HLD)
+# High-Level Design (HLD) & Architectures
 
-## 1. Request Flow Lifecycle
+## 1. System Request Flow
 
-### Phase 1: Ingestion & Extraction
-1. User sends message: `"I've decided to use PyTorch for my recommendation system."`
-2. Backend receives message and routes it to the **Memory Engine**.
-3. Memory Engine analyzes the text:
-   - Extracts structured memory: `type: decision`, `subject: recommendation system`, `value: PyTorch`.
-   - Extracts Entities/Relations: `User -> building -> Recommendation System -> uses -> PyTorch`.
+### Phase 1: Ingestion (Multi-modal & Voice)
+1. User input arrives via Text, Uploaded File/Image, or Voice.
+2. **Extraction**: The text is parsed by the LLM (Mistral API) to extract structured memory (facts, decisions, entities).
 
-### Phase 2: Processing & Storage
-1. **Duplicate Detection**: Queries Vector DB for similar facts. If similar, updates/merges.
-2. **Conflict Detection**: Checks if this contradicts existing facts (e.g., old memory said "TensorFlow"). Marks old as superseded.
-3. **Importance Scoring**: Calculates score (e.g., 0.92) based on user-specificity and goal relevance.
-4. **Persistence**: Saves embedding to Vector DB and nodes/edges to Kuzu.
+### Phase 2: Processing & Deduplication
+1. **Hash-Based Deduplication**: Content is hashed (MD5). If an exact hash match exists, skip to Phase 3.
+2. **Persistence**: Saves embedding to the **SQLite Vectors table** and edges to the **Kuzu Graph**.
 
-### Phase 3: Retrieval & Augmentation
-1. Message is embedded and searched against Vector DB (Semantic Match).
-2. Entities in message trigger graph traversal in Kuzu (Logical Match).
-3. Results are merged and ranked based on:
-   `Score = Similarity + Importance + Recency + Rel_Strength + Confidence`
-4. Top N memories are formatted into a system prompt.
+### Phase 3: Dual-Memory Retrieval
+1. **Parallel Search**:
+   - **Vector Search (SQLite)**: Embeds the query and performs custom cosine similarity against the SQLite vector table (threshold=0.5).
+   - **Graph Search (Kuzu)**: Extracts entities from the query, traverses the Kuzu graph for connected nodes.
+2. **Re-Ranking**: Uses `rank-bm25` to evaluate graph search results and merge them optimally.
 
-### Phase 4: Generation
-1. LLM receives: System Prompt (with User Profile/Memories) + Conversation History + New Message.
-2. LLM generates personalized response.
-3. (Optional Post-Process): Asynchronous extraction of any new decisions made during the AI's response.
+### Phase 4: Generation & Live Voice
+1. Combined context is sent to the **Mistral API**.
+2. **Live Voice Mode**: If active, the LLM's text response is streamed to a Text-to-Speech (TTS) engine and played to the user.
 
-## 2. Deployment Architecture (Local Mode)
+---
+
+## 2. Deployment Architecture & Microservice Design
+
+The backend is designed using **SOLID principles** and a **Microservices-inspired architecture**. Even if deployed as a single FastAPI server initially, the domains are strictly decoupled into independent services.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Client
-        Browser[Next.js App]
+        UI[Next.js 16 + React 19]
     end
     
-    subgraph Server [FastAPI Server]
-        API[API Router]
-        Extractor[Memory Extractor]
-        Ranker[Ranker/Context Builder]
+    subgraph API Gateway / Router
+        Gateway[FastAPI Router]
     end
     
-    subgraph Databases
-        SQL[(SQLite)]
-        VDB[(Vector DB)]
-        Kuzu[(Kuzu Graph)]
+    subgraph Microservice Domains (Decoupled)
+        AuthService[Auth Service]
+        ChatService[Chat Inference Service]
+        MemoryService[Memory Engine Service]
     end
     
-    subgraph Inference Model [Local Inference]
-        LLM[Ollama / Llama.cpp]
-        Embed[Embeddings Model]
+    subgraph External Cloud APIs
+        Mistral[Mistral API]
+        Gemini[Gemini API]
     end
     
-    Browser --> API
-    API --> Extractor
-    API --> Ranker
-    Extractor --> Databases
-    Ranker --> Databases
-    Extractor --> Embed
-    Ranker --> LLM
+    subgraph Data Layer (Repositories)
+        UserDB[(SQLite - Users)]
+        VectorDB[(SQLite - Vectors)]
+        GraphDB[(Kuzu Graph)]
+    end
+
+    UI -->|HTTP| Gateway
+    Gateway --> AuthService
+    Gateway --> ChatService
+    
+    ChatService --> MemoryService
+    MemoryService --> Gemini
+    MemoryService --> VectorDB
+    MemoryService --> GraphDB
+    
+    ChatService --> Mistral
 ```
+
+### Architectural Principles Applied:
+1. **Single Responsibility (SRP)**: The `MemoryService` *only* handles SQLite/Kuzu operations. The `ChatService` *only* handles Mistral LLM requests.
+2. **Dependency Inversion (DIP)**: Services rely on abstract Interfaces/Repositories (e.g., `VectorStoreInterface`) rather than concrete database classes.
+3. **Clean Code**: High testability, decoupled domains, and strict Pydantic validation boundaries between services.

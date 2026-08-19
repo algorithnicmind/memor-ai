@@ -1,40 +1,44 @@
 # Product Requirements Document (PRD)
 
 ## 1. Product Vision
-**Memorai** is not just a chatbot. It is an AI companion with persistent, structured memory that learns important information about a user, connects related concepts, remembers previous decisions and preferences, and uses that knowledge to provide personalized responses across conversations. It builds an evolving understanding of its user.
+**Memorai** is an AI companion with persistent, structured memory that learns important information about a user. It builds an evolving understanding of its user.
+
+*“Talk to me once, and I'll remember forever.”*
 
 ## 2. Problem Statement
-Current AI chatbots lack persistent, long-term memory. If a user states a fact, preference, or project goal in one session, the AI forgets it by the next session. Users are forced to repeat context continuously (e.g., "I'm a CSE student using Python...").
+Current AI chatbots suffer from **Context Amnesia**. Users are forced to repeat context constantly. 
 
-## 3. Target Audience
-- Developers, students, researchers, and general users who want a personalized AI companion that remembers their context, goals, and technical stack over long periods.
+## 3. Key Features & Innovations
 
-## 4. Key Features
+### 3.1. Production-Level User Flow
+- **Animated Landing Page**: A premium, animated landing page featuring an About section and Contact section.
+- **Authentication**: Secure Login and Registration (Sign Up) using User ID and Password.
+- **ChatGPT-Style Interface**:
+  - **Center**: Main chat area.
+  - **Sidebar (Left)**: "New Chat" button and "Chat History".
+  - **History Management**: 3-dot menu on past chats to Rename, Share, or Delete the chat.
+  - **User Profile & Settings**: Personalization settings, Help Center (Terms of Service, Privacy Policy), and Logout.
 
-### 4.1. Persistent Memory Extraction
-- Automatically extract facts, preferences, goals, plans, decisions, entities, and relationships from user conversations without explicit commands.
+### 3.2. Rich Interactions
+- **Multi-Modal Uploads**: A `+` (Plus) icon in the chat input for sharing files, images, and documents with the AI.
+- **Voice Input**: Users can provide prompts via voice commands.
+- **Live Voice Chat**: A real-time, live voice conversation mode to speak directly with the AI, similar to ChatGPT's voice mode.
 
-### 4.2. Memory Management & Evolution
-- **Conflict Resolution**: Identify when new information contradicts old information (e.g., switching from TensorFlow to PyTorch) and mark old data as superseded.
-- **Importance Scoring**: Filter out noise. Only store high-value memories (importance/confidence scoring).
-- **Duplicate Detection**: Avoid redundant memories by semantically merging similar facts.
+### 3.3. Structured Memory & Dual Retrieval
+Combines two powerful memory systems:
+1. **Vector Memory ("What is similar?")**: Semantic similarity via Google Gemini Embeddings and **SQLite** vector storage.
+2. **Knowledge Graph ("How are things connected?")**: Entity relationships via **Kuzu** Graph Database.
 
-### 4.3. Dual Retrieval System
-- Retrieve context using both **Semantic/Vector Search** and **Graph Traversal** (Knowledge Graph) to find related concepts and explicit relationships.
+### 3.4. Memory & Personalization Transparency
+- **Absolute Transparency**: The UI must clearly show the user *what memory data* was retrieved to generate the response. This is a critical feature to build trust.
 
-### 4.4. Memory Dashboard
-- A dedicated UI for users to view their AI's understanding of them.
-- Displays categories: Profile, Goals, Skills, Preferences, Decisions, and a visual Knowledge Graph.
-- Allows users to inspect, edit, or delete specific memories (e.g., "Forget everything about project X").
+## 4. Software Architecture Principles
+- **SOLID Principles**: Codebase must adhere strictly to SOLID principles to maintain extensibility.
+- **Microservices-Inspired Modularity**: Backend will be split into highly decoupled domains (Auth, Memory Engine, Chat Inference) with clean interfaces.
+- **Clean Code**: Strict typing, comprehensive error handling, and separation of concerns.
 
-### 4.5. Memory Transparency
-- Provide a "Why did you say that?" feature explaining which specific memories and graph relationships influenced the AI's response.
-
-### 4.6. Offline / Local-First Mode
-- Ability to run the entire stack (LLM, embeddings, databases) locally for privacy and offline usage, with an optional cloud mode for enhanced models.
-
-## 5. Success Metrics
-- **Memory Accuracy**: Percentage of correct facts recalled.
-- **Retrieval Precision & Recall**: Relevance and completeness of fetched memories.
-- **Conflict Resolution Rate**: Accuracy of deprecating outdated facts.
-- **Token Efficiency**: Minimizing the size of the context window injected into the LLM.
+## 5. Future Roadmap
+- **Progressive Web App (PWA) & Offline Mode** (Postponed for future release)
+- **Multi-User Memory Sharing**: Collaborative AI.
+- **Memory Analytics**: Visualizing the knowledge graph.
+- **Agent Mode**: AI acts on user's behalf with context.

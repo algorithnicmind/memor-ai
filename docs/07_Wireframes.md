@@ -1,73 +1,59 @@
 # Wireframes
 
-## 1. Chat Interface with Memory Panel
+## 1. Animated Landing Page & Auth
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ MEMORAI                                                       👤 Rahul  │
-├─────────────────┬───────────────────────────────────┬───────────────────┤
-│                 │                                   │                   │
-│  Conversations  │            Chat Area              │    🧠 Memories    │
-│                 │                                   │                   │
-│  + New Chat     │ User: What should I learn?        │  Profile          │
-│                 │                                   │  • CSE student    │
-│  History        │ AI: Based on your goals and       │                   │
-│  • ML Project   │     your existing Python skills,  │  Goals            │
-│  • React bugs   │     I'd suggest...                │  • Become ML eng  │
-│  • Rust intro   │                                   │                   │
-│                 │                                   │  Preferences      │
-│                 │                                   │  • Prefers Python │
-│                 │                                   │                   │
-│                 │ [ Type your message...        ]   │  Projects         │
-│                 │                                   │  • Rec. system    │
-│                 │ 🧠 3 memories used                │                   │
-│                 │ 🔗 4 relationships found          │                   │
-└─────────────────┴───────────────────────────────────┴───────────────────┘
-```
-
-## 2. Memory Dashboard (Dedicated View)
-
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│ MEMORAI | Dashboard                                           👤 Rahul  │
+│ MEMORAI                                   [Home] [About] [Contact]      │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  MY MEMORY                                                 [Export]     │
-│  ──────────────────────────────────────────────────────────────────     │
+│   (Animated 3D Brain / Particles)                                       │
 │                                                                         │
-│  👤 PROFILE                             🎯 GOALS                        │
-│  Name: Rahul      [Edit]                • Learn Machine Learning [x]    │
-│  Education: CSE   [Edit]                • Build AI project       [x]    │
+│   AN AI THAT ACTUALLY REMEMBERS YOU.                                    │
 │                                                                         │
-│  💻 SKILLS                              ❤️ PREFERENCES                  │
-│  • Python         [x]                   • Python                 [x]    │
-│  • FastAPI        [x]                   • Local AI               [x]    │
-│                                                                         │
-│  📋 DECISIONS                           🔗 KNOWLEDGE GRAPH              │
-│  • Chose PyTorch                        (Visual interactive node graph) │
-│    Reason: Team familiarity [x]           [User] -> [Building] -> [App] │
-│                                                                         │
-│                                                                         │
-│  ⚠️ DANGER ZONE                                                         │
-│  [ Forget Entire Project Category ]  [ Wipe All Memory ]                │
+│   [ Register / Sign Up ]      [ Login ]                                 │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 3. Transparency Modal ("Why did you say that?")
+## 2. Main Chat Interface (ChatGPT-Style)
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│ MEMORAI                                                       👤 Rahul  │
+├─────────────────┬───────────────────────────────────────────────────────┤
+│ 📝 + New Chat   │                                                       │
+│ ────────────────│  User: What should I learn?                           │
+│ Chat History    │                                                       │
+│                 │  AI: Based on your goals and Python skills, I'd       │
+│ • ML Project  ⋮ │      suggest...                                       │
+│   ├ Rename      │                                                       │
+│   ├ Share       │  [ ℹ️ Personalization Info: Used 3 memories ]         │
+│   └ Delete      │                                                       │
+│                 │                                                       │
+│ • React bugs  ⋮ │                                                       │
+│                 │                                                       │
+│ ────────────────│                                                       │
+│ ⚙️ Settings     │                                                       │
+│ 👤 Profile      │  [ ➕ ] [ 🎤 ] [ Type your message...         ] [ 📞 ]│
+│ ❓ Help Center  │   ↑      ↑                                        ↑   │
+│ 🚪 Logout       │  Files Voice Input                          Live Voice│
+└─────────────────┴───────────────────────────────────────────────────────┘
+```
+
+## 3. Help Center & Settings Modal
 
 ```text
 ┌───────────────────────────────────────────────┐
-│ Memory Context Used                           │
+│ Help & Settings                               │
 ├───────────────────────────────────────────────┤
-│ This response was influenced by:              │
 │                                               │
-│ 🧠 Memory: "You prefer Python"                │
-│    Source: Conversation #18                   │
-│    Importance: 0.94                           │
+│  [ Privacy Policy ]                           │
+│  [ Terms of Service ]                         │
 │                                               │
-│ 🔗 Relationship:                              │
-│    Python → used_for → Machine Learning       │
+│  Personalization Data:                        │
+│  • See what the AI knows about you            │
+│  • Manage what data is saved                  │
 │                                               │
 │                                   [ Close ]   │
 └───────────────────────────────────────────────┘
