@@ -13,10 +13,14 @@ import logging
 from typing import Any, cast
 
 try:
-    import kuzu
+    # Ladybug is the official successor to KuzuDB; ships Python 3.14
+    # Windows wheels where kuzu 0.11.3 only has up to cp312. Same
+    # C++ engine, same Cypher surface — aliased so the rest of the
+    # file can reference `kuzu` unchanged.
+    import ladybug as kuzu
 except ImportError as err:
     raise ImportError(
-        "kuzu is not installed. Run: uv add kuzu"
+        "ladybug (kuzuDB successor) is not installed. Run: uv add ladybug"
     ) from err
 
 try:
