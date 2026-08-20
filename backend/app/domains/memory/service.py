@@ -3,7 +3,7 @@
 Single public class (`Memory`) that orchestrates:
   - OpenAI-SDK-compatible embeddings + chat
   - Tortoise-backed vector store + history store
-  - Kuzu graph for entity/relation structure
+  - Embedded graph store for entity/relation structure
 
 Internal flow regroups as `_extract_facts → _find_collisions →
 _resolve_actions → _apply_actions → _write_memory`, with the typed
@@ -24,12 +24,12 @@ from typing import Any
 
 from app.core.config import AppConfig, get_config_from_env
 from app.domains.chat.openai_compat import OpenAICompatibleLLM
-from app.domains.memory.cortex_prompts import (
+from app.domains.memory.extraction_prompts import (
     get_fact_retrieval_messages,
     get_structured_fact_messages,
     get_update_memory_prompt,
 )
-from app.infrastructure.database.kuzu_repo import KuzuGraph
+from app.infrastructure.database.graph_repo import GraphStore
 from app.infrastructure.database.sqlite_repo import HistoryStore
 from app.infrastructure.database.vector_repo import SearchResult, VectorStore
 from app.infrastructure.embeddings.openai_compat import OpenAICompatibleEmbedder
@@ -91,9 +91,9 @@ class Memory:
         self.llm = OpenAICompatibleLLM(provider)
         self.vector_store = VectorStore(self.config.vector_store)
         self.history_db = HistoryStore(self.config.history)
-        self.graph: KuzuGraph | None = None
+        self.graph: GraphStore | None = None
         if self.config.graph_store.enabled:
-            self.graph = KuzuGraph(
+            self.graph = GraphStore(
                 config=self.config.graph_store,
                 provider_config=provider,
             )

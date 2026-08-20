@@ -1,9 +1,9 @@
 """Prompts for the memory pipeline.
 
-Voice is our own — terse, instruction-following. `STRUCTURED_FACT_
-EXTRACTION_PROMPT` predates the rewrite and stays as-is; the rest
-were rewritten to fit the project's house style (no longer reads like
-a copy of any popular generic library's templates).
+Fact retrieval, decision context, and entity-relation extraction all
+live here. Fact-related prompts are loaded by the memory service for
+the add/search/update flow; relation-related prompts are loaded by
+the graph store for write-time extraction.
 """
 
 from datetime import datetime
