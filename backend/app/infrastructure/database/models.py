@@ -72,7 +72,17 @@ class ChatConversation(Model):
 
 
 class ChatMessage(Model):
-    """One turn in a conversation — user message or assistant reply."""
+    """One turn in a conversation — user message or assistant reply.
+
+    `is_ingested` flips to True once the background drainer has
+    extracted typed memories from a user message. Assistant messages
+    never need ingesting — they don't carry new facts — so they're
+    marked True at write time.
+
+    `ingest_attempts` increments on every drain attempt; future
+    work could use it to back off or quarantine rows that fail too
+    many times in a row (today we just retry indefinitely).
+    """
 
     id = fields.CharField(pk=True, max_length=64)
     conversation = fields.ForeignKeyField(
@@ -83,7 +93,9 @@ class ChatMessage(Model):
     role = fields.CharField(max_length=16)  # "user" | "assistant"
     content = fields.TextField()
     created_at = fields.DatetimeField(auto_now_add=True)
+    is_ingested = fields.BooleanField(default=True)
+    ingest_attempts = fields.IntField(default=0)
 
     class Meta:
         table = "chat_messages"
-        indexes = [("conversation", "created_at")]
+        indexes = [("conversation", "created_at"), ("is_ingested", "created_at")]

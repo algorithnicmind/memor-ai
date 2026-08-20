@@ -1,14 +1,16 @@
-"""Chat routes — store the message, recall context, ask the LLM,
-record the turn into a chat-history conversation.
+"""Chat routes — recall context, ask the LLM, record the turn into a
+chat-history conversation, then queue memory ingest in the background.
 
 Each handler:
   1. Resolves user_id from current_user (NEVER from the request body -
      prevents forged user_id reading another user's memories).
-  2. Stores the message via memory.add() (fact extraction + graph).
-  3. Searches for related memories (vector + graph) for context.
-  4. Calls the LLM with the assembled context.
-  5. Records both the user message and the assistant reply into a
+  2. Searches for related memories (vector + graph) for context.
+  3. Calls the LLM with the assembled context and returns the reply.
+  4. Records both the user message and the assistant reply into a
      ChatConversation (creating one if conversation_id is missing).
+  5. Fire-and-forget: schedules a background ingest of the user
+     message into the typed-memory store. The user already has
+     their reply by the time facts land.
 
 The chat-history surface (conversations list, single conversation,
 delete) lives here too - it's all /api/chat/*.
@@ -18,6 +20,7 @@ All handlers are async + msgspec-only; routes gated by `current_user`.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -35,6 +38,7 @@ from app.api.schemas import (
 )
 from app.domains.auth.models import User
 from app.domains.chat_history import service as history_service
+from app.domains.ingest import drain_one
 from app.domains.memory.service import Memory
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -84,14 +88,11 @@ async def chat(
         user, req.conversation_id
     )
 
-    # 2) Store. user_id comes from the token, never from the body.
-    add_result = await memory.add(
-        req.message,
-        user_id=user.id,
-        metadata=req.metadata,
-    )
-
-    # 3) Recall - pull the top-k memories + graph hits for context.
+    # 2) Recall - pull the top-k memories + graph hits for context.
+    #    Note: the just-sent message isn't in the memory store yet
+    #    (ingest is deferred to the background drainer). The reply
+    #    doesn't depend on its own message being recalled, so this
+    #    is fine — the user said it, they don't need to see it back.
     recall = await memory.search(
         req.message,
         user_id=user.id,
@@ -99,7 +100,7 @@ async def chat(
         threshold=0.3,
     )
 
-    # 4) Ask the LLM.
+    # 3) Ask the LLM.
     context_block = _memory_context_block(
         recall.get("results", []), recall.get("relations", [])
     )
@@ -112,15 +113,24 @@ async def chat(
     )
     response_text = raw if isinstance(raw, str) else (raw.get("content") or "")
 
-    # 5) Record the raw transcript turn. Independent of the memory store:
-    #    the typed-memory extraction above is what gets recalled later,
-    #    the chat history is what the user sees in the sidebar.
-    await history_service.record_turn(conversation, "user", req.message)
+    # 4) Record the raw transcript turn. Independent of the memory store:
+    #    the typed-memory extraction (now background) is what gets
+    #    recalled later; the chat history is what the user sees in
+    #    the sidebar.
+    user_message = await history_service.record_turn(
+        conversation, "user", req.message
+    )
     await history_service.record_turn(conversation, "assistant", response_text)
+
+    # 5) Fire-and-forget: extract typed memories in the background.
+    #    The user already has their reply. If the drainer fails it
+    #    bumps `ingest_attempts` and the periodic drain_loop will
+    #    pick it up later — no message is silently lost.
+    asyncio.create_task(drain_one(memory, user_message.id))
 
     return to_jsonable(ChatResponse(
         response=response_text,
-        stored=add_result.get("results", []),
+        stored=[],  # ingest is async; populated on the next recall
         relations=recall.get("relations", []),
         conversation_id=conversation.id,
     ))
