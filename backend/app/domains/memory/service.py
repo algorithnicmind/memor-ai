@@ -1,7 +1,16 @@
+"""Memory service.
+
+Single public class (`Memory`) that orchestrates:
+  - OpenAI-SDK-compatible embeddings + chat
+  - Tortoise-backed vector store + history store
+  - Kuzu graph for entity/relation structure
+
+Internal flow regroups as `_extract_facts → _find_collisions →
+_resolve_actions → _apply_actions → _write_memory`, with the typed
+decision pipeline sitting on top.
 """
-Core Memory implementation.
-Main class that orchestrates embeddings, LLM, vector storage, and graph storage.
-"""
+
+from __future__ import annotations
 
 import asyncio
 import hashlib
@@ -10,509 +19,199 @@ import logging
 import re
 import uuid
 from copy import deepcopy
-from datetime import datetime
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any
 
-from app.core.config import MemoryConfig
-from app.infrastructure.embeddings.gemini import GeminiEmbedding
-from app.infrastructure.database.kuzu_repo import KuzuGraph
-from app.domains.chat.mistral import MistralLLM
+from app.core.config import AppConfig, get_config_from_env
+from app.domains.chat.openai_compat import OpenAICompatibleLLM
 from app.domains.memory.cortex_prompts import (
     get_fact_retrieval_messages,
     get_structured_fact_messages,
     get_update_memory_prompt,
 )
-from app.infrastructure.database.sqlite_repo import SQLiteStorage
+from app.infrastructure.database.kuzu_repo import KuzuGraph
+from app.infrastructure.database.sqlite_repo import HistoryStore
 from app.infrastructure.database.vector_repo import SearchResult, VectorStore
+from app.infrastructure.embeddings.openai_compat import OpenAICompatibleEmbedder
 
 logger = logging.getLogger(__name__)
 
 
-def remove_code_blocks(content: str) -> str:
-    """Remove enclosing code block markers from a string."""
+# ---- helpers -------------------------------------------------------------
+
+
+def strip_code_fences(content: str) -> str:
+    """Strip ``` fences + <think> blocks from a string."""
     pattern = r"^```[a-zA-Z0-9]*\n([\s\S]*?)\n```$"
     match = re.match(pattern, content.strip())
-    result = match.group(1).strip() if match else content.strip()
-    return re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL).strip()
+    body = match.group(1).strip() if match else content.strip()
+    return re.sub(r"<think>.*?</think>", "", body, flags=re.DOTALL).strip()
 
 
-def extract_json(text: str) -> str:
-    """Extract JSON content from a string."""
+def recover_json(text: str) -> str:
+    """Pull JSON out of a (possibly fenced) string."""
     text = text.strip()
     match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
-    if match:
-        return match.group(1)
-    return text
+    return match.group(1) if match else text
 
 
-def parse_messages(messages: list[dict[str, Any]]) -> str:
-    """Parse messages into a formatted string."""
-    response = ""
+def format_chat(messages: list[dict[str, Any]]) -> str:
+    """Render chat messages as a transcript string."""
+    out: list[str] = []
     for msg in messages:
         role = msg.get("role", "")
         content = msg.get("content", "")
-        if role == "system":
-            response += f"system: {content}\n"
-        elif role == "user":
-            response += f"user: {content}\n"
-        elif role == "assistant":
-            response += f"assistant: {content}\n"
-    return response
+        if role in ("system", "user", "assistant"):
+            out.append(f"{role}: {content}")
+    return "\n".join(out) + "\n"
+
+
+_TYPE_PRIORITY = {"decision": 4, "preference": 3, "plan": 2, "simple": 1}
+_IMPORTANCE_PRIORITY = {"critical": 4, "high": 3, "normal": 2, "low": 1}
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _now_iso() -> str:
+    return _now().isoformat()
+
+
+# ---- public class --------------------------------------------------------
 
 
 class Memory:
-    """
-    Main Memory class that provides a simple interface for memory operations.
-    Integrates embeddings (Gemini), LLM (Mistral), vector storage (SQLite),
-    and graph storage (Kuzu).
-    """
+    """Memory engine — vector + history + graph + chat."""
 
-    def __init__(self, config: Optional[MemoryConfig] = None):
-        """Initialize Memory.
-
-        Args:
-            config: Optional memory configuration. Uses defaults if not provided.
-        """
-        self.config = config or MemoryConfig()
-
-        # Initialize components
-        self.embedder = GeminiEmbedding(self.config.embedder)
-        self.llm = MistralLLM(self.config.llm)
-        self.history_db = SQLiteStorage(self.config.history)
+    def __init__(self, config: AppConfig | None = None) -> None:
+        self.config = config or get_config_from_env()
+        provider = self.config.provider
+        self.embedder = OpenAICompatibleEmbedder(provider)
+        self.llm = OpenAICompatibleLLM(provider)
         self.vector_store = VectorStore(self.config.vector_store)
-
-        # Initialize graph if enabled
-        self.graph: Optional[KuzuGraph] = None
+        self.history_db = HistoryStore(self.config.history)
+        self.graph: KuzuGraph | None = None
         if self.config.graph_store.enabled:
             self.graph = KuzuGraph(
                 config=self.config.graph_store,
-                embedder_config=self.config.embedder,
-                llm_config=self.config.llm,
+                provider_config=provider,
             )
+        logger.info("Memory engine ready")
 
-        logger.info("Memory initialized successfully")
-
-    @classmethod
-    def from_dict(cls, config_dict: dict[str, Any]) -> "Memory":
-        """Create Memory from a configuration dictionary.
-
-        Args:
-            config_dict: Configuration dictionary.
-
-        Returns:
-            Memory instance.
-        """
-        config = MemoryConfig.from_dict(config_dict)
-        return cls(config)
+    # -- public surface ----------------------------------------------------
 
     def _build_filters(
         self,
-        user_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        run_id: Optional[str] = None,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        run_id: str | None = None,
     ) -> dict[str, Any]:
-        """Build filters from session IDs.
-
-        Args:
-            user_id: Optional user ID.
-            agent_id: Optional agent ID.
-            run_id: Optional run ID.
-
-        Returns:
-            Filter dictionary.
-
-        Raises:
-            ValueError: If no session ID is provided.
-        """
-        filters = {}
-
+        filters: dict[str, Any] = {}
         if user_id:
             filters["user_id"] = user_id
         if agent_id:
             filters["agent_id"] = agent_id
         if run_id:
             filters["run_id"] = run_id
-
         if not filters:
             raise ValueError(
-                "At least one of 'user_id', 'agent_id', or 'run_id' must be provided."
+                "At least one of user_id, agent_id, or run_id must be provided"
             )
-
         return filters
 
     async def add(
         self,
         messages: str | dict[str, Any] | list[dict[str, Any]],
         *,
-        user_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        run_id: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        run_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
         infer: bool = True,
     ) -> dict[str, Any]:
-        """Add a memory.
-
-        Args:
-            messages: The message(s) to store. Can be a string, dict, or list of dicts.
-            user_id: Optional user ID.
-            agent_id: Optional agent ID.
-            run_id: Optional run ID.
-            metadata: Optional additional metadata.
-            infer: Whether to infer memories from the messages.
-
-        Returns:
-            Dictionary with results.
-        """
         filters = self._build_filters(user_id, agent_id, run_id)
-
-        # Normalize messages
-        if isinstance(messages, str):
-            messages = [{"role": "user", "content": messages}]
-        elif isinstance(messages, dict):
-            messages = [messages]
-        elif not isinstance(messages, list):
-            raise ValueError("messages must be str, dict, or list[dict]")
-
-        # Build metadata
-        base_metadata = deepcopy(metadata) if metadata else {}
-        base_metadata.update(filters)
-
+        normalized = self._coerce_messages(messages)
+        base_meta = deepcopy(metadata) if metadata else {}
+        base_meta.update(filters)
         if not infer:
-            # Direct storage without fact extraction
-            return await self._add_direct(messages, base_metadata)
-
-        # Infer facts and store
-        return await self._add_with_inference(messages, base_metadata, filters)
+            return await self._add_direct(normalized, base_meta)
+        return await self._add_with_inference(normalized, base_meta, filters)
 
     async def add_structured(
         self,
         messages: str | dict[str, Any] | list[dict[str, Any]],
         *,
-        user_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        run_id: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        run_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Add memory with structured fact extraction.
-
-        This method extracts facts with type classification (simple, decision,
-        preference, plan) and stores additional context for decisions.
-        Also handles UPDATE and DELETE of existing memories when new facts
-        contradict or update them.
-
-        Args:
-            messages: The message(s) to store. Can be a string, dict, or list of dicts.
-            user_id: Optional user ID.
-            agent_id: Optional agent ID.
-            run_id: Optional run ID.
-            metadata: Optional additional metadata.
-
-        Returns:
-            Dictionary with results including structured facts.
-        """
         filters = self._build_filters(user_id, agent_id, run_id)
+        normalized = self._coerce_messages(messages)
+        base_meta = deepcopy(metadata) if metadata else {}
+        base_meta.update(filters)
 
-        # Normalize messages
-        if isinstance(messages, str):
-            messages = [{"role": "user", "content": messages}]
-        elif isinstance(messages, dict):
-            messages = [messages]
-        elif not isinstance(messages, list):
-            raise ValueError("messages must be str, dict, or list[dict]")
-
-        # Build metadata
-        base_metadata = deepcopy(metadata) if metadata else {}
-        base_metadata.update(filters)
-
-        # Parse messages
-        parsed_messages = parse_messages(messages)
-
-        # Get structured fact extraction prompts
-        system_prompt, user_prompt = get_structured_fact_messages(parsed_messages)
-
-        # Extract structured facts using LLM
-        response = await self.llm.generate_response(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-        )
-
-        # Add to graph if enabled
-        if self.graph:
-            try:
-                await self.graph.add(parsed_messages, filters)
-            except Exception as e:
-                logger.error(f"Error adding to graph: {e}")
-
-        # Parse structured facts
-        try:
-            response_text = (
-                response
-                if isinstance(response, str)
-                else str(response.get("content", ""))
-            )
-            response_text = remove_code_blocks(response_text)
-            if not response_text.strip():
-                structured_facts = []
-            else:
-                try:
-                    parsed = json.loads(response_text)
-                    structured_facts = parsed.get("structured_facts", [])
-                except json.JSONDecodeError:
-                    extracted = extract_json(response_text)
-                    parsed = json.loads(extracted)
-                    structured_facts = parsed.get("structured_facts", [])
-        except Exception as e:
-            logger.error(f"Error parsing structured facts: {e}")
-            structured_facts = []
-
+        transcript = format_chat(normalized)
+        structured_facts = await self._extract_structured_facts(transcript, filters)
         if not structured_facts:
-            logger.debug("No structured facts extracted")
             return {"results": []}
 
-        # Extract content from structured facts for similarity search
-        new_facts = [f.get("content", "") for f in structured_facts if f.get("content")]
-
+        new_facts = [f["content"] for f in structured_facts if f.get("content")]
         if not new_facts:
             return {"results": []}
 
-        # Search for existing similar memories
-        existing_memories = []
-        new_embeddings = {}
-
-        async def process_fact(fact_content: str) -> list[dict[str, str]]:
-            embeddings = await self.embedder.embed(fact_content, "add")
-            new_embeddings[fact_content] = embeddings
-
-            results = await self.vector_store.search(
-                query=fact_content,
-                vectors=embeddings,
-                limit=5,
-                filters=filters,
-            )
-
-            return [
-                {"id": mem.id, "text": mem.payload.get("data", "")} for mem in results
-            ]
-
-        # Search for each fact in parallel
-        search_tasks = [process_fact(f) for f in new_facts]
-        search_results = await asyncio.gather(*search_tasks)
-
-        for result_group in search_results:
-            existing_memories.extend(result_group)
-
-        # Deduplicate existing memories
-        unique_memories = {}
-        for mem in existing_memories:
-            unique_memories[mem["id"]] = mem
-        existing_memories = list(unique_memories.values())
-
-        # Create temp ID mapping for LLM
-        temp_id_map = {}
-        for idx, mem in enumerate(existing_memories):
-            temp_id_map[str(idx)] = mem["id"]
-            existing_memories[idx]["id"] = str(idx)
-
-        # Get memory update actions from LLM
-        if existing_memories:
-            update_prompt = get_update_memory_prompt(
-                existing_memories,
-                new_facts,
-                self.config.custom_update_memory_prompt,
-            )
-
-            try:
-                update_response = await self.llm.generate_response(
-                    messages=[{"role": "user", "content": update_prompt}],
-                    response_format={"type": "json_object"},
-                )
-            except Exception as e:
-                logger.error(f"Error getting memory actions: {e}")
-                update_response = ""
-
-            try:
-                update_text = (
-                    update_response
-                    if isinstance(update_response, str)
-                    else str(update_response.get("content", ""))
-                )
-                if not update_text or not update_text.strip():
-                    memory_actions = {}
-                else:
-                    update_text = remove_code_blocks(update_text)
-                    memory_actions = json.loads(update_text)
-            except Exception as e:
-                logger.error(f"Invalid JSON response: {e}")
-                memory_actions = {}
-        else:
-            # No existing memories, just add all
-            memory_actions = {
-                "memory": [
-                    {"id": str(i), "text": f, "event": "ADD"}
-                    for i, f in enumerate(new_facts)
-                ]
-            }
-
-        # Build a map of fact content to structured fact data
-        fact_data_map = {f.get("content", ""): f for f in structured_facts}
-
-        # Process memory actions
-        returned_memories = []
-
-        for action in memory_actions.get("memory", []):
-            try:
-                text = action.get("text")
-                if not text:
-                    continue
-
-                event = action.get("event")
-
-                # Get structured data for this fact if available
-                struct_data = fact_data_map.get(text, {})
-
-                # Build enhanced metadata
-                fact_metadata = deepcopy(base_metadata)
-                fact_metadata["memory_type"] = struct_data.get("memory_type", "simple")
-                fact_metadata["category"] = struct_data.get("category")
-                fact_metadata["importance"] = struct_data.get("importance", "normal")
-
-                # Add decision-specific fields if present
-                if struct_data.get("memory_type") == "decision":
-                    decision_context = {
-                        "goal": struct_data.get("goal"),
-                        "constraints": struct_data.get("constraints", []),
-                        "alternatives": struct_data.get("alternatives", []),
-                        "final_choice": struct_data.get("final_choice"),
-                        "reasoning": struct_data.get("reasoning"),
-                        "emotional_state": struct_data.get("emotional_state"),
-                    }
-                    fact_metadata["decision_context"] = decision_context
-
-                if event == "ADD":
-                    mem_id = await self._create_memory(
-                        text,
-                        deepcopy(fact_metadata),
-                        existing_embeddings=new_embeddings,
-                    )
-                    result = {
-                        "id": mem_id,
-                        "memory": text,
-                        "event": "ADD",
-                        "memory_type": struct_data.get("memory_type", "simple"),
-                    }
-                    if struct_data.get("memory_type") == "decision":
-                        result["decision_context"] = fact_metadata.get(
-                            "decision_context"
-                        )
-                    returned_memories.append(result)
-
-                elif event == "UPDATE":
-                    real_id = temp_id_map.get(action.get("id"))
-                    if real_id:
-                        await self._update_memory(
-                            real_id,
-                            text,
-                            deepcopy(fact_metadata),
-                            existing_embeddings=new_embeddings,
-                        )
-                        result = {
-                            "id": real_id,
-                            "memory": text,
-                            "event": "UPDATE",
-                            "previous_memory": action.get("old_memory"),
-                            "memory_type": struct_data.get("memory_type", "simple"),
-                        }
-                        if struct_data.get("memory_type") == "decision":
-                            result["decision_context"] = fact_metadata.get(
-                                "decision_context"
-                            )
-                        returned_memories.append(result)
-
-                elif event == "DELETE":
-                    real_id = temp_id_map.get(action.get("id"))
-                    if real_id:
-                        await self._delete_memory(real_id)
-                        returned_memories.append(
-                            {
-                                "id": real_id,
-                                "memory": text,
-                                "event": "DELETE",
-                            }
-                        )
-
-            except Exception as e:
-                logger.error(f"Error processing action: {action}, Error: {e}")
-
-        return {"results": returned_memories}
+        existing, new_embeddings = await self._find_collisions(new_facts, filters)
+        actions = await self._resolve_actions(
+            existing=existing, new_facts=new_facts
+        )
+        return await self._apply_actions(
+            actions=actions,
+            existing=existing,
+            new_facts=new_facts,
+            structured_facts=structured_facts,
+            base_meta=base_meta,
+            new_embeddings=new_embeddings,
+        )
 
     async def add_decision(
         self,
         goal: str,
         *,
-        user_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        run_id: Optional[str] = None,
-        constraints: Optional[list[str]] = None,
-        alternatives: Optional[list[str]] = None,
-        final_choice: Optional[str] = None,
-        reasoning: Optional[str] = None,
-        emotional_state: Optional[str] = None,
-        category: Optional[str] = None,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        run_id: str | None = None,
+        constraints: list[str] | None = None,
+        alternatives: list[str] | None = None,
+        final_choice: str | None = None,
+        reasoning: str | None = None,
+        emotional_state: str | None = None,
+        category: str | None = None,
         privacy_level: str = "private",
-        confidence: Optional[float] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        confidence: float | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Add a structured decision memory directly.
-
-        Use this method to explicitly record a decision with full context.
-
-        Args:
-            goal: What the user was trying to achieve.
-            user_id: Optional user ID.
-            agent_id: Optional agent ID.
-            run_id: Optional run ID.
-            constraints: Limitations or requirements (budget, time, etc.).
-            alternatives: Options that were considered.
-            final_choice: The decision made.
-            reasoning: Why this choice was made.
-            emotional_state: How the user feels about the decision.
-            category: Domain (career, health, finance, personal, etc.).
-            privacy_level: "private", "shared", or "public".
-            confidence: Confidence level 0.0 to 1.0.
-            metadata: Optional additional metadata.
-
-        Returns:
-            Dictionary with the stored decision memory.
-        """
         filters = self._build_filters(user_id, agent_id, run_id)
+        decision_id = (
+            f"decision_{_now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        )
 
-        # Generate decision ID
-        decision_id = f"decision_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
-        timestamp = datetime.utcnow().isoformat()
-
-        # Build decision memory content
-        content_parts = [f"Decision: {goal}"]
+        parts = [f"Decision: {goal}"]
         if final_choice:
-            content_parts.append(f"Choice: {final_choice}")
+            parts.append(f"Choice: {final_choice}")
         if reasoning:
-            content_parts.append(f"Reasoning: {reasoning}")
-        content = " | ".join(content_parts)
+            parts.append(f"Reasoning: {reasoning}")
+        content = " | ".join(parts)
 
-        # Build metadata
-        fact_metadata = deepcopy(metadata) if metadata else {}
-        fact_metadata.update(filters)
-        fact_metadata["memory_type"] = "decision"
-        fact_metadata["category"] = category
-        fact_metadata["importance"] = "high"  # Decisions are typically important
-        fact_metadata["privacy_level"] = privacy_level
-
-        # Decision context
-        decision_context = {
+        meta = deepcopy(metadata) if metadata else {}
+        meta.update(filters)
+        meta["memory_type"] = "decision"
+        meta["category"] = category
+        meta["importance"] = "high"
+        meta["privacy_level"] = privacy_level
+        meta["decision_context"] = {
             "decision_id": decision_id,
-            "timestamp": timestamp,
+            "timestamp": _now_iso(),
             "goal": goal,
             "constraints": constraints or [],
             "alternatives": alternatives or [],
@@ -521,74 +220,145 @@ class Memory:
             "emotional_state": emotional_state,
             "confidence": confidence,
         }
-        fact_metadata["decision_context"] = decision_context
+        await self._write_memory(content, meta)
 
-        # Create memory
-        mem_id = await self._create_memory(content, fact_metadata)
-
-        # Add to graph if enabled (create decision-specific relationships)
         if self.graph:
             try:
-                # Build decision graph representation
-                decision_text = f"User made a decision about {goal}. "
+                graph_text = f"User made a decision about {goal}. "
                 if final_choice:
-                    decision_text += f"Chose {final_choice}. "
+                    graph_text += f"Chose {final_choice}. "
                 if reasoning:
-                    decision_text += f"Because {reasoning}."
-
-                await self.graph.add(decision_text, filters)
-            except Exception as e:
-                logger.error(f"Error adding decision to graph: {e}")
+                    graph_text += f"Because {reasoning}."
+                await self.graph.add(graph_text, filters)
+            except Exception:
+                logger.exception("Graph ingest failed for decision")
 
         return {
             "results": [
                 {
-                    "id": mem_id,
+                    "id": decision_id,
                     "memory": content,
                     "event": "ADD",
                     "memory_type": "decision",
-                    "decision_context": decision_context,
+                    "decision_context": meta["decision_context"],
                 }
             ]
         }
 
+    async def get(self, memory_id: str) -> dict[str, Any] | None:
+        memory = await self.vector_store.get(memory_id)
+        return _format_memory(memory) if memory else None
+
+    async def get_all(
+        self,
+        *,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        run_id: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, list[dict[str, Any]]]:
+        filters = self._build_filters(user_id, agent_id, run_id)
+        memories, _ = await self.vector_store.list(filters=filters, limit=limit)
+        return {"results": [_format_memory(m) for m in memories]}
+
+    async def search(
+        self,
+        query: str,
+        *,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        run_id: str | None = None,
+        limit: int = 100,
+        threshold: float = 0.5,
+    ) -> dict[str, Any]:
+        filters = self._build_filters(user_id, agent_id, run_id)
+        embedding = await self.embedder.embed(query, "query")
+        matches = await self.vector_store.search(
+            query=query, vectors=embedding, limit=limit, filters=filters
+        )
+        results = [
+            _format_memory(m, include_score=True)
+            for m in matches
+            if m.score >= threshold
+        ]
+        relations: list[dict[str, str]] = []
+        if self.graph:
+            try:
+                relations = await self.graph.search(query, filters, limit)
+            except Exception:
+                logger.exception("Graph search failed")
+        return {"results": results, "relations": relations}
+
+    async def update(self, memory_id: str, data: str) -> dict[str, str]:
+        embedding = await self.embedder.embed(data, "update")
+        await self._write_update(
+            memory_id, data, {}, existing_embeddings={data: embedding}
+        )
+        return {"message": "Memory updated successfully!"}
+
+    async def delete(self, memory_id: str) -> dict[str, str]:
+        await self._delete_memory(memory_id)
+        return {"message": "Memory deleted successfully!"}
+
+    async def delete_all(
+        self,
+        user_id: str | None = None,
+        agent_id: str | None = None,
+        run_id: str | None = None,
+    ) -> dict[str, str]:
+        filters = self._build_filters(user_id, agent_id, run_id)
+        memories, _ = await self.vector_store.list(filters=filters)
+        for mem in memories:
+            await self._delete_memory(mem.id)
+        if self.graph:
+            try:
+                await self.graph.delete_all(filters)
+            except Exception:
+                logger.exception("Graph delete_all failed")
+        return {"message": "Memories deleted successfully!"}
+
+    async def history(self, memory_id: str) -> list[dict[str, Any]]:
+        return await self.history_db.get_history(memory_id)
+
+    async def reset(self) -> dict[str, str]:
+        await self.vector_store.reset()
+        await self.history_db.reset()
+        if self.graph:
+            self.graph.reset()
+        return {"message": "Memory reset successfully!"}
+
+    async def close(self) -> None:
+        await self.vector_store.close()
+        await self.history_db.close()
+
+    # -- internal pipeline ------------------------------------------------
+
+    @staticmethod
+    def _coerce_messages(
+        messages: str | dict[str, Any] | list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if isinstance(messages, str):
+            return [{"role": "user", "content": messages}]
+        if isinstance(messages, dict):
+            return [messages]
+        if isinstance(messages, list):
+            return messages
+        raise ValueError("messages must be str, dict, or list[dict]")
+
     async def _add_direct(
         self, messages: list[dict[str, Any]], metadata: dict[str, Any]
     ) -> dict[str, Any]:
-        """Add messages directly without inference.
-
-        Args:
-            messages: List of message dicts.
-            metadata: Metadata to store with each memory.
-
-        Returns:
-            Dictionary with results.
-        """
-        returned_memories = []
-
+        results: list[dict[str, Any]] = []
         for msg in messages:
             if not isinstance(msg, dict) or "content" not in msg:
                 continue
-
             if msg.get("role") == "system":
                 continue
-
-            content = msg["content"]
-            per_msg_meta = deepcopy(metadata)
-            per_msg_meta["role"] = msg.get("role", "user")
-
-            # Create memory
-            mem_id = await self._create_memory(content, per_msg_meta)
-
-            returned_memories.append(
-                {
-                    "id": mem_id,
-                    "memory": content,
-                    "event": "ADD",
-                }
-            )
-
-        return {"results": returned_memories}
+            meta = deepcopy(metadata)
+            meta["role"] = msg.get("role", "user")
+            mem_id = await self._write_memory(msg["content"], meta)
+            results.append({"id": mem_id, "memory": msg["content"], "event": "ADD"})
+        return {"results": results}
 
     async def _add_with_inference(
         self,
@@ -596,31 +366,36 @@ class Memory:
         metadata: dict[str, Any],
         filters: dict[str, Any],
     ) -> dict[str, Any]:
-        """Add messages with fact extraction and inference.
+        transcript = format_chat(messages)
+        new_facts = await self._extract_facts(transcript, messages, metadata)
 
-        Args:
-            messages: List of message dicts.
-            metadata: Metadata to store with each memory.
-            filters: Filters for searching existing memories.
+        if not new_facts:
+            return {"results": []}
 
-        Returns:
-            Dictionary with results.
-        """
-        # Parse messages
-        parsed_messages = parse_messages(messages)
+        existing, new_embeddings = await self._find_collisions(new_facts, filters)
+        actions = await self._resolve_actions(existing=existing, new_facts=new_facts)
+        return await self._apply_actions(
+            actions=actions,
+            existing=existing,
+            new_facts=new_facts,
+            structured_facts=None,
+            base_meta=metadata,
+            new_embeddings=new_embeddings,
+        )
 
-        # Get fact retrieval prompts
-        if self.config.custom_fact_extraction_prompt:
-            system_prompt = self.config.custom_fact_extraction_prompt
-            user_prompt = f"Input:\n{parsed_messages}"
-        else:
-            has_assistant = any(msg.get("role") == "assistant" for msg in messages)
-            is_agent_memory = metadata.get("agent_id") is not None and has_assistant
-            system_prompt, user_prompt = get_fact_retrieval_messages(
-                parsed_messages, is_agent_memory
-            )
-
-        # Extract facts using LLM
+    async def _extract_facts(
+        self,
+        transcript: str,
+        messages: list[dict[str, Any]],
+        metadata: dict[str, Any],
+    ) -> list[str]:
+        has_assistant = any(msg.get("role") == "assistant" for msg in messages)
+        is_agent_memory = (
+            metadata.get("agent_id") is not None and has_assistant
+        )
+        system_prompt, user_prompt = get_fact_retrieval_messages(
+            transcript, is_agent_memory
+        )
         response = await self.llm.generate_response(
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -628,644 +403,349 @@ class Memory:
             ],
             response_format={"type": "json_object"},
         )
-
-        # Add to graph if enabled
         if self.graph:
             try:
-                await self.graph.add(parsed_messages, filters)
-            except Exception as e:
-                logger.error(f"Error adding to graph: {e}")
-
-        # Parse extracted facts
+                await self.graph.add(transcript, metadata)
+            except Exception:
+                logger.exception("Graph ingest failed")
         try:
-            response_text = (
+            text = response if isinstance(response, str) else str(response.get("content", ""))
+            text = strip_code_fences(text)
+            if not text.strip():
+                return []
+            try:
+                return json.loads(text)["facts"]
+            except json.JSONDecodeError:
+                return json.loads(recover_json(text))["facts"]
+        except Exception:
+            logger.exception("Fact extraction failed")
+            return []
+
+    async def _extract_structured_facts(
+        self, transcript: str, filters: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        system_prompt, user_prompt = get_structured_fact_messages(transcript)
+        response = await self.llm.generate_response(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+        if self.graph:
+            try:
+                await self.graph.add(transcript, filters)
+            except Exception:
+                logger.exception("Graph ingest failed")
+        try:
+            text = (
                 response
                 if isinstance(response, str)
                 else str(response.get("content", ""))
             )
-            response_text = remove_code_blocks(response_text)
-            if not response_text.strip():
-                new_facts = []
-            else:
-                try:
-                    new_facts = json.loads(response_text)["facts"]
-                except json.JSONDecodeError:
-                    extracted = extract_json(response_text)
-                    new_facts = json.loads(extracted)["facts"]
-        except Exception as e:
-            logger.error(f"Error parsing facts: {e}")
-            new_facts = []
+            text = strip_code_fences(text)
+            if not text.strip():
+                return []
+            try:
+                return json.loads(text).get("structured_facts", [])
+            except json.JSONDecodeError:
+                return json.loads(recover_json(text)).get("structured_facts", [])
+        except Exception:
+            logger.exception("Structured-fact extraction failed")
+            return []
 
+    async def _find_collisions(
+        self, new_facts: list[str], filters: dict[str, Any]
+    ) -> tuple[list[dict[str, str]], dict[str, list[float]]]:
+        """Embed + vector-search each fact in parallel; return neighbours + cached embeddings."""
+        new_embeddings: dict[str, list[float]] = {}
+
+        async def _scan(fact: str) -> list[dict[str, str]]:
+            embedding = await self.embedder.embed(fact, "index")
+            new_embeddings[fact] = embedding
+            hits = await self.vector_store.search(
+                query=fact, vectors=embedding, limit=5, filters=filters
+            )
+            return [{"id": h.id, "text": h.payload.get("data", "")} for h in hits]
+
+        groups = await asyncio.gather(*[_scan(f) for f in new_facts])
+        flat = [m for group in groups for m in group]
+        deduped: dict[str, dict[str, str]] = {}
+        for mem in flat:
+            deduped[mem["id"]] = mem
+        return list(deduped.values()), new_embeddings
+
+    async def _resolve_actions(
+        self,
+        existing: list[dict[str, str]],
+        new_facts: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Ask the LLM whether each fact is ADD / UPDATE / DELETE / NONE."""
         if not new_facts:
-            logger.debug("No new facts extracted")
-            return {"results": []}
-
-        # Search for existing memories
-        existing_memories = []
-        new_embeddings = {}
-
-        async def process_fact(fact: str) -> list[dict[str, str]]:
-            embeddings = await self.embedder.embed(fact, "add")
-            new_embeddings[fact] = embeddings
-
-            results = await self.vector_store.search(
-                query=fact,
-                vectors=embeddings,
-                limit=5,
-                filters=filters,
+            return {"memory": []}
+        if not existing:
+            return {
+                "memory": [
+                    {"id": str(i), "text": fact, "event": "ADD"}
+                    for i, fact in enumerate(new_facts)
+                ]
+            }
+        prompt = get_update_memory_prompt(existing, new_facts)
+        try:
+            response = await self.llm.generate_response(
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
             )
+        except Exception:
+            logger.exception("Memory-action resolution failed")
+            return {"memory": []}
+        try:
+            text = (
+                response
+                if isinstance(response, str)
+                else str(response.get("content", ""))
+            )
+            text = strip_code_fences(text)
+            return json.loads(text) if text.strip() else {"memory": []}
+        except Exception:
+            logger.exception("Action JSON parse failed")
+            return {"memory": []}
 
-            return [
-                {"id": mem.id, "text": mem.payload.get("data", "")} for mem in results
-            ]
-
-        # Search for each fact in parallel
-        search_tasks = [process_fact(fact) for fact in new_facts]
-        search_results = await asyncio.gather(*search_tasks)
-
-        for result_group in search_results:
-            existing_memories.extend(result_group)
-
-        # Deduplicate
-        unique_memories = {}
-        for mem in existing_memories:
-            unique_memories[mem["id"]] = mem
-        existing_memories = list(unique_memories.values())
-
-        logger.info(f"Found {len(existing_memories)} existing memories")
-
-        # Create temp ID mapping
-        temp_id_map = {}
-        for idx, mem in enumerate(existing_memories):
+    async def _apply_actions(
+        self,
+        *,
+        actions: dict[str, list[dict[str, Any]]],
+        existing: list[dict[str, str]],
+        new_facts: list[str],
+        structured_facts: list[dict[str, Any]] | None,
+        base_meta: dict[str, Any],
+        new_embeddings: dict[str, list[float]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        temp_id_map: dict[str, str] = {}
+        for idx, mem in enumerate(existing):
             temp_id_map[str(idx)] = mem["id"]
-            existing_memories[idx]["id"] = str(idx)
+            mem["id"] = str(idx)
 
-        # Get memory update actions
-        if new_facts:
-            update_prompt = get_update_memory_prompt(
-                existing_memories,
-                new_facts,
-                self.config.custom_update_memory_prompt,
-            )
-
-            try:
-                response = await self.llm.generate_response(
-                    messages=[{"role": "user", "content": update_prompt}],
-                    response_format={"type": "json_object"},
-                )
-            except Exception as e:
-                logger.error(f"Error getting memory actions: {e}")
-                response = ""
-
-            try:
-                response_text = (
-                    response
-                    if isinstance(response, str)
-                    else str(response.get("content", ""))
-                )
-                if not response_text or not response_text.strip():
-                    memory_actions = {}
-                else:
-                    response_text = remove_code_blocks(response_text)
-                    memory_actions = json.loads(response_text)
-            except Exception as e:
-                logger.error(f"Invalid JSON response: {e}")
-                memory_actions = {}
-        else:
-            memory_actions = {}
-
-        # Process memory actions
-        returned_memories = []
-
-        for action in memory_actions.get("memory", []):
+        fact_data_map = (
+            {f.get("content", ""): f for f in structured_facts}
+            if structured_facts
+            else {}
+        )
+        results: list[dict[str, Any]] = []
+        for action in actions.get("memory", []):
             try:
                 text = action.get("text")
                 if not text:
                     continue
-
                 event = action.get("event")
-
+                struct = fact_data_map.get(text, {})
+                meta = deepcopy(base_meta)
+                meta["memory_type"] = struct.get("memory_type", "simple") or "simple"
+                meta["category"] = struct.get("category")
+                meta["importance"] = struct.get("importance", "normal") or "normal"
+                if meta["memory_type"] == "decision":
+                    meta["decision_context"] = {
+                        "goal": struct.get("goal"),
+                        "constraints": struct.get("constraints", []),
+                        "alternatives": struct.get("alternatives", []),
+                        "final_choice": struct.get("final_choice"),
+                        "reasoning": struct.get("reasoning"),
+                        "emotional_state": struct.get("emotional_state"),
+                    }
                 if event == "ADD":
-                    mem_id = await self._create_memory(
-                        text,
-                        deepcopy(metadata),
-                        existing_embeddings=new_embeddings,
+                    mem_id = await self._write_memory(
+                        text, meta, existing_embeddings=new_embeddings
                     )
-                    returned_memories.append(
-                        {
-                            "id": mem_id,
-                            "memory": text,
-                            "event": "ADD",
-                        }
-                    )
-
+                    result: dict[str, Any] = {
+                        "id": mem_id,
+                        "memory": text,
+                        "event": "ADD",
+                        "memory_type": meta["memory_type"],
+                    }
+                    if meta["memory_type"] == "decision":
+                        result["decision_context"] = meta["decision_context"]
+                    results.append(result)
                 elif event == "UPDATE":
                     real_id = temp_id_map.get(action.get("id"))
-                    if real_id:
-                        await self._update_memory(
-                            real_id,
-                            text,
-                            deepcopy(metadata),
-                            existing_embeddings=new_embeddings,
-                        )
-                        returned_memories.append(
-                            {
-                                "id": real_id,
-                                "memory": text,
-                                "event": "UPDATE",
-                                "previous_memory": action.get("old_memory"),
-                            }
-                        )
-
+                    if not real_id:
+                        continue
+                    await self._write_update(
+                        real_id,
+                        text,
+                        meta,
+                        existing_embeddings=new_embeddings,
+                    )
+                    upd_result: dict[str, Any] = {
+                        "id": real_id,
+                        "memory": text,
+                        "event": "UPDATE",
+                        "previous_memory": action.get("old_memory"),
+                        "memory_type": meta["memory_type"],
+                    }
+                    if meta["memory_type"] == "decision":
+                        upd_result["decision_context"] = meta["decision_context"]
+                    results.append(upd_result)
                 elif event == "DELETE":
                     real_id = temp_id_map.get(action.get("id"))
-                    if real_id:
-                        await self._delete_memory(real_id)
-                        returned_memories.append(
-                            {
-                                "id": real_id,
-                                "memory": text,
-                                "event": "DELETE",
-                            }
-                        )
+                    if not real_id:
+                        continue
+                    await self._delete_memory(real_id)
+                    results.append(
+                        {"id": real_id, "memory": text, "event": "DELETE"}
+                    )
+            except Exception:
+                logger.exception("Action application failed: %s", action)
+        return {"results": results}
 
-            except Exception as e:
-                logger.error(f"Error processing action: {action}, Error: {e}")
+    # -- storage primitives ------------------------------------------------
 
-        return {"results": returned_memories}
-
-    async def _create_memory(
+    async def _write_memory(
         self,
         data: str,
         metadata: dict[str, Any],
-        existing_embeddings: Optional[dict[str, list[float]]] = None,
+        existing_embeddings: dict[str, list[float]] | None = None,
     ) -> str:
-        """Create a new memory.
-
-        Args:
-            data: The memory content.
-            metadata: Metadata for the memory.
-            existing_embeddings: Optional pre-computed embeddings.
-
-        Returns:
-            The memory ID (existing if duplicate, new if created).
-        """
-        logger.debug(f"Creating memory: {data[:50]}...")
-
-        # Compute hash for deduplication
         content_hash = hashlib.md5(data.encode()).hexdigest()
-
-        # Check for existing memory with same hash (duplicate check)
-        filters = {}
-        for key in ["user_id", "agent_id", "run_id"]:
-            if key in metadata:
-                filters[key] = metadata[key]
-
+        filters: dict[str, Any] = {
+            k: metadata[k]
+            for k in ("user_id", "agent_id", "run_id")
+            if k in metadata
+        }
         if filters:
-            existing_memories, _ = await self.vector_store.list(
+            existing_mems, _ = await self.vector_store.list(
                 filters=filters, limit=100
             )
-            for mem in existing_memories:
+            for mem in existing_mems:
                 if mem.payload.get("hash") == content_hash:
-                    logger.debug(f"Duplicate found, returning existing: {mem.id}")
-                    return (
-                        mem.id
-                    )  # Return existing memory ID instead of creating duplicate
-
-        # Get or compute embeddings
+                    return mem.id
         if existing_embeddings and data in existing_embeddings:
-            embeddings = existing_embeddings[data]
+            embedding = existing_embeddings[data]
         else:
-            embeddings = await self.embedder.embed(data, "add")
-
-        # Create memory record
-        memory_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
-
+            embedding = await self.embedder.embed(data, "index")
+        mem_id = str(uuid.uuid4())
+        now = _now_iso()
         metadata["data"] = data
         metadata["hash"] = content_hash
         metadata["created_at"] = now
-
-        # Store in vector store
         await self.vector_store.insert(
-            vectors=[embeddings],
-            ids=[memory_id],
-            payloads=[metadata],
+            vectors=[embedding], ids=[mem_id], payloads=[metadata]
         )
-
-        # Add to history
         await self.history_db.add_history(
-            memory_id=memory_id,
-            event="ADD",
-            new_memory=data,
-            created_at=now,
+            memory_id=mem_id, event="ADD", new_memory=data, created_at=_now()
         )
+        return mem_id
 
-        logger.debug(f"Created memory: {memory_id}")
-        return memory_id
-
-    async def _update_memory(
+    async def _write_update(
         self,
         memory_id: str,
         data: str,
         metadata: dict[str, Any],
-        existing_embeddings: Optional[dict[str, list[float]]] = None,
+        existing_embeddings: dict[str, list[float]] | None = None,
     ) -> None:
-        """Update an existing memory.
-
-        Args:
-            memory_id: The memory ID to update.
-            data: The new memory content.
-            metadata: Updated metadata.
-            existing_embeddings: Optional pre-computed embeddings.
-        """
-        logger.debug(f"Updating memory: {memory_id}")
-
-        # Get existing memory
         existing = await self.vector_store.get(memory_id)
         if not existing:
-            logger.warning(f"Memory not found: {memory_id}")
+            logger.warning("Memory not found for update: %s", memory_id)
             return
-
         old_data = existing.payload.get("data", "")
         old_hash = existing.payload.get("hash", "")
         new_hash = hashlib.md5(data.encode()).hexdigest()
-
-        # Skip update if content is exactly the same (no-op update)
         if old_hash == new_hash:
-            logger.debug(f"Skipping update - content unchanged: {memory_id}")
             return
 
-        # Get or compute embeddings
         if existing_embeddings and data in existing_embeddings:
-            embeddings = existing_embeddings[data]
+            embedding = existing_embeddings[data]
         else:
-            embeddings = await self.embedder.embed(data, "update")
+            embedding = await self.embedder.embed(data, "update")
 
-        # Update metadata - but PRESERVE important original values
-        now = datetime.utcnow().isoformat()
-        new_payload = deepcopy(existing.payload)
+        # Type-priority merge: don't downgrade memory_type.
+        old_type = existing.payload.get("memory_type", "simple")
+        new_type = metadata.get("memory_type", "simple")
+        if _TYPE_PRIORITY.get(new_type, 0) <= _TYPE_PRIORITY.get(old_type, 0):
+            metadata["memory_type"] = old_type
+            if old_type == "decision":
+                old_ctx = existing.payload.get("decision_context") or {}
+                new_ctx = metadata.get("decision_context") or {}
+                for key, value in new_ctx.items():
+                    if value and (
+                        not old_ctx.get(key) or value != old_ctx.get(key)
+                    ):
+                        old_ctx[key] = value
+                metadata["decision_context"] = old_ctx
 
-        # Preserve original memory_type if the new one is "simple" (less specific)
-        # Only upgrade memory_type, never downgrade
-        old_memory_type = existing.payload.get("memory_type", "simple")
-        new_memory_type = metadata.get("memory_type", "simple")
-
-        # Type priority: decision > preference > plan > simple
-        type_priority = {"decision": 4, "preference": 3, "plan": 2, "simple": 1}
-        if type_priority.get(new_memory_type, 0) <= type_priority.get(
-            old_memory_type, 0
-        ):
-            # New type is same or less specific - preserve old type
-            metadata["memory_type"] = old_memory_type
-
-            # Also preserve decision_context if we're keeping the decision type
-            if old_memory_type == "decision" and existing.payload.get(
-                "decision_context"
-            ):
-                # Merge decision contexts - keep old values, add new ones
-                old_context = existing.payload.get("decision_context", {})
-                new_context = metadata.get("decision_context", {})
-                if new_context:
-                    # Only update fields that have meaningful new values
-                    for key, value in new_context.items():
-                        if value and (
-                            not old_context.get(key) or value != old_context.get(key)
-                        ):
-                            old_context[key] = value
-                metadata["decision_context"] = old_context
-            elif old_memory_type == "decision":
-                metadata["decision_context"] = existing.payload.get("decision_context")
-
-        # Preserve category if new one is None
+        # Preserve category + importance if new value is weaker.
         if metadata.get("category") is None and existing.payload.get("category"):
-            metadata["category"] = existing.payload.get("category")
+            metadata["category"] = existing.payload["category"]
+        old_imp = existing.payload.get("importance", "normal")
+        new_imp = metadata.get("importance", "normal")
+        if _IMPORTANCE_PRIORITY.get(new_imp, 0) < _IMPORTANCE_PRIORITY.get(old_imp, 0):
+            metadata["importance"] = old_imp
 
-        # Preserve importance if new one is "normal" and old one is higher
-        importance_priority = {"critical": 4, "high": 3, "normal": 2, "low": 1}
-        old_importance = existing.payload.get("importance", "normal")
-        new_importance = metadata.get("importance", "normal")
-        if importance_priority.get(new_importance, 0) < importance_priority.get(
-            old_importance, 0
-        ):
-            metadata["importance"] = old_importance
-
+        now = _now_iso()
+        new_payload = deepcopy(existing.payload)
         new_payload.update(metadata)
         new_payload["data"] = data
         new_payload["hash"] = new_hash
         new_payload["updated_at"] = now
-
-        # Add to inline changelog (tracks previous values) - only if content changed
         changelog = new_payload.get("changelog", [])
         changelog.append(
-            {
-                "previous_value": old_data,
-                "changed_to": data,
-                "changed_at": now,
-            }
+            {"previous_value": old_data, "changed_to": data, "changed_at": now}
         )
         new_payload["changelog"] = changelog
 
-        # Update in vector store
         await self.vector_store.update(
-            vector_id=memory_id,
-            vector=embeddings,
-            payload=new_payload,
+            vector_id=memory_id, vector=embedding, payload=new_payload
         )
-
-        # Add to history (external tracking)
         await self.history_db.add_history(
             memory_id=memory_id,
             event="UPDATE",
             old_memory=old_data,
             new_memory=data,
-            updated_at=now,
+            updated_at=_now(),
         )
 
     async def _delete_memory(self, memory_id: str) -> None:
-        """Delete a memory.
-
-        Args:
-            memory_id: The memory ID to delete.
-        """
-        logger.debug(f"Deleting memory: {memory_id}")
-
-        # Get existing memory
         existing = await self.vector_store.get(memory_id)
         if existing:
-            old_data = existing.payload.get("data", "")
-
-            # Add to history
             await self.history_db.add_history(
                 memory_id=memory_id,
                 event="DELETE",
-                old_memory=old_data,
-                updated_at=datetime.utcnow().isoformat(),
+                old_memory=existing.payload.get("data", ""),
+                updated_at=_now(),
             )
-
-        # Delete from vector store
         await self.vector_store.delete(memory_id)
-
-        # Mark history as deleted
         await self.history_db.delete_history(memory_id)
 
-    async def get(self, memory_id: str) -> Optional[dict[str, Any]]:
-        """Get a memory by ID.
 
-        Args:
-            memory_id: The memory ID.
+# ---- output formatter ----------------------------------------------------
 
-        Returns:
-            Memory dictionary or None if not found.
-        """
-        memory = await self.vector_store.get(memory_id)
-        if not memory:
-            return None
 
-        return self._format_memory(memory)
-
-    async def get_all(
-        self,
-        *,
-        user_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        run_id: Optional[str] = None,
-        limit: int = 100,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Get all memories.
-
-        Args:
-            user_id: Optional user ID filter.
-            agent_id: Optional agent ID filter.
-            run_id: Optional run ID filter.
-            limit: Maximum number of results.
-
-        Returns:
-            Dictionary with results list.
-        """
-        filters = self._build_filters(user_id, agent_id, run_id)
-
-        memories, _ = await self.vector_store.list(filters=filters, limit=limit)
-
-        return {"results": [self._format_memory(mem) for mem in memories]}
-
-    async def search(
-        self,
-        query: str,
-        *,
-        user_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        run_id: Optional[str] = None,
-        limit: int = 100,
-        threshold: float = 0.5,  # Default threshold to filter irrelevant results
-    ) -> dict[str, Any]:
-        """Search for memories.
-
-        Args:
-            query: The search query.
-            user_id: Optional user ID filter.
-            agent_id: Optional agent ID filter.
-            run_id: Optional run ID filter.
-            limit: Maximum number of results.
-            threshold: Minimum score threshold (0-1). Defaults to 0.5.
-
-        Returns:
-            Dictionary with results and relations.
-        """
-        filters = self._build_filters(user_id, agent_id, run_id)
-
-        # Get embeddings
-        embeddings = await self.embedder.embed(query, "search")
-
-        # Search vector store
-        memories = await self.vector_store.search(
-            query=query,
-            vectors=embeddings,
-            limit=limit,
-            filters=filters,
-        )
-
-        # Apply threshold to filter out irrelevant memories
-        memories = [m for m in memories if m.score >= threshold]
-
-        results = [self._format_memory(mem, include_score=True) for mem in memories]
-
-        # Search graph if enabled
-        relations = []
-        if self.graph:
-            try:
-                relations = await self.graph.search(query, filters, limit)
-            except Exception as e:
-                logger.error(f"Error searching graph: {e}")
-
-        return {
-            "results": results,
-            "relations": relations,
-        }
-
-    async def update(self, memory_id: str, data: str) -> dict[str, str]:
-        """Update a memory.
-
-        Args:
-            memory_id: The memory ID to update.
-            data: The new memory content.
-
-        Returns:
-            Success message.
-        """
-        embeddings = await self.embedder.embed(data, "update")
-        await self._update_memory(
-            memory_id,
-            data,
-            {},
-            existing_embeddings={data: embeddings},
-        )
-        return {"message": "Memory updated successfully!"}
-
-    async def delete(self, memory_id: str) -> dict[str, str]:
-        """Delete a memory.
-
-        Args:
-            memory_id: The memory ID to delete.
-
-        Returns:
-            Success message.
-        """
-        await self._delete_memory(memory_id)
-        return {"message": "Memory deleted successfully!"}
-
-    async def delete_all(
-        self,
-        user_id: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        run_id: Optional[str] = None,
-    ) -> dict[str, str]:
-        """Delete all memories matching filters.
-
-        Args:
-            user_id: Optional user ID filter.
-            agent_id: Optional agent ID filter.
-            run_id: Optional run ID filter.
-
-        Returns:
-            Success message.
-        """
-        filters = self._build_filters(user_id, agent_id, run_id)
-
-        # Get all memories
-        memories, _ = await self.vector_store.list(filters=filters)
-
-        # Delete each memory
-        for mem in memories:
-            await self._delete_memory(mem.id)
-
-        # Delete from graph if enabled
-        if self.graph:
-            try:
-                await self.graph.delete_all(filters)
-            except Exception as e:
-                logger.error(f"Error deleting from graph: {e}")
-
-        logger.info(f"Deleted {len(memories)} memories")
-        return {"message": "Memories deleted successfully!"}
-
-    async def history(self, memory_id: str) -> list[dict[str, Any]]:
-        """Get history for a memory.
-
-        Args:
-            memory_id: The memory ID.
-
-        Returns:
-            List of history records.
-        """
-        return await self.history_db.get_history(memory_id)
-
-    async def reset(self) -> dict[str, str]:
-        """Reset all storage (vectors, history, graph).
-
-        Returns:
-            Success message.
-        """
-        await self.vector_store.reset()
-        await self.history_db.reset()
-
-        if self.graph:
-            self.graph.reset()
-
-        logger.info("Memory reset complete")
-        return {"message": "Memory reset successfully!"}
-
-    async def close(self) -> None:
-        """Close all connections."""
-        await self.vector_store.close()
-        await self.history_db.close()
-        logger.info("Memory connections closed")
-
-    def _format_memory(
-        self, memory: SearchResult, include_score: bool = False
-    ) -> dict[str, Any]:
-        """Format a memory for output.
-
-        Args:
-            memory: The memory search result.
-            include_score: Whether to include the score.
-
-        Returns:
-            Formatted memory dictionary.
-        """
-        result = {
-            "id": memory.id,
-            "memory": memory.payload.get("data", ""),
-            "hash": memory.payload.get("hash"),
-            "created_at": memory.payload.get("created_at"),
-            "updated_at": memory.payload.get("updated_at"),
-        }
-
-        if include_score:
-            result["score"] = memory.score
-
-        # Add session IDs
-        for key in ["user_id", "agent_id", "run_id"]:
-            if key in memory.payload:
-                result[key] = memory.payload[key]
-
-        # Add structured memory fields
-        if "memory_type" in memory.payload:
-            result["memory_type"] = memory.payload["memory_type"]
-        if "category" in memory.payload:
-            result["category"] = memory.payload["category"]
-        if "importance" in memory.payload:
-            result["importance"] = memory.payload["importance"]
-
-        # Add decision context if present
-        if "decision_context" in memory.payload:
-            result["decision_context"] = memory.payload["decision_context"]
-
-        # Add changelog if present (tracks previous values)
-        if "changelog" in memory.payload and memory.payload["changelog"]:
-            result["changelog"] = memory.payload["changelog"]
-
-        # Add extra metadata (excluding known fields)
-        excluded_keys = {
-            "data",
-            "hash",
-            "created_at",
-            "updated_at",
-            "user_id",
-            "agent_id",
-            "run_id",
-            "role",
-            "memory_type",
-            "category",
-            "importance",
-            "decision_context",
-            "privacy_level",
-            "changelog",
-        }
-        extra_metadata = {
-            k: v for k, v in memory.payload.items() if k not in excluded_keys
-        }
-        if extra_metadata:
-            result["metadata"] = extra_metadata
-
-        return result
+def _format_memory(
+    memory: SearchResult, include_score: bool = False
+) -> dict[str, Any]:
+    payload = memory.payload
+    result: dict[str, Any] = {
+        "id": memory.id,
+        "memory": payload.get("data", ""),
+        "hash": payload.get("hash"),
+        "created_at": payload.get("created_at"),
+        "updated_at": payload.get("updated_at"),
+    }
+    if include_score:
+        result["score"] = memory.score
+    for key in ("user_id", "agent_id", "run_id", "role"):
+        if key in payload:
+            result[key] = payload[key]
+    for key in ("memory_type", "category", "importance", "decision_context"):
+        if key in payload:
+            result[key] = payload[key]
+    if payload.get("changelog"):
+        result["changelog"] = payload["changelog"]
+    excluded = {
+        "data", "hash", "created_at", "updated_at", "user_id", "agent_id",
+        "run_id", "role", "memory_type", "category", "importance",
+        "decision_context", "privacy_level", "changelog",
+    }
+    extra = {k: v for k, v in payload.items() if k not in excluded}
+    if extra:
+        result["metadata"] = extra
+    return result
