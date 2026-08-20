@@ -29,7 +29,7 @@ graph TD
     subgraph Data Stores
         SQL[(SQLite - Relational)]
         VDB[(Vector DB)]
-        Graph[(Kuzu - Graph)]
+        Graph[(Ladybug - Graph)]
     end
     
     User -- Message --> UI
@@ -72,5 +72,5 @@ graph TD
     UpdateMemory --> SQL[(SQLite)]
     MarkSuperseded --> SQL
     Scorer --> VDB
-    Scorer --> Graph[(Kuzu Graph)]
+    Scorer --> Graph[(Ladybug Graph)]
 ```

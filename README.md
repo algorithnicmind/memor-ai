@@ -1,6 +1,6 @@
 # Memorai
 
-An AI Companion That Actually Remembers You. Memorai uses a dual-memory architecture (SQLite Vectors + Kuzu Knowledge Graph) to store, relate, and recall context seamlessly across conversations.
+An AI Companion That Actually Remembers You. Memorai uses a dual-memory architecture (SQLite Vectors + Ladybug Knowledge Graph) to store, relate, and recall context seamlessly across conversations.
 
 ---
 
@@ -26,8 +26,10 @@ python -m venv venv
 # On Mac/Linux:
 source venv/bin/activate
 
-# Install the dependencies (Requirements file coming soon in Phase 2)
-pip install fastapi uvicorn pydantic msgspec google-genai kuzu aiosqlite rank-bm25 openai
+# Install the dependencies (uv is the source of truth — see backend/pyproject.toml)
+uv sync
+# Or, if you must use pip: pip install fastapi uvicorn msgspec 'bcrypt>=4.2' pyjwt \
+#   tortoise-orm aerich 'ladybug>=0.19.1' rank-bm25 openai python-dotenv email-validator
 
 # Run the FastAPI server
 uvicorn app.main:app --reload --port 8000
@@ -58,7 +60,7 @@ npm run dev
 ## 🛠️ Architecture Overview
 * **Frontend**: Next.js 16, React 19, Tailwind CSS, Framer Motion.
 * **Backend**: FastAPI, Python 3.12, msgspec for high-speed serialization.
-* **Database**: Embedded SQLite (Vector search) + Kuzu (Knowledge Graph).
+* **Database**: Embedded SQLite via Tortoise ORM (Vector search) + Ladybug (Knowledge Graph).
 
 ## 📄 Documentation
 For deep technical dives, refer to the `docs/` folder in this repository:

@@ -2,7 +2,7 @@
 
 FastAPI service for the Memorai memory engine. Stores typed memories
 (simple facts, decisions, preferences, plans) per user, with vector
-similarity search and a Kuzu knowledge graph.
+similarity search and a Ladybug embedded knowledge graph.
 
 ## What it does
 
@@ -14,8 +14,8 @@ similarity search and a Kuzu knowledge graph.
 - Conflict-aware updates: when new info contradicts or supersedes
   existing memories, the engine updates or deletes them rather than
   appending duplicates.
-- Vector similarity over an SQLite-backed cosine index, plus a Kuzu
-  knowledge graph for entity–relation queries.
+- Vector similarity over a Tortoise/SQLite-backed cosine index, plus a
+  Ladybug embedded knowledge graph for entity–relation queries.
 
 ## Stack
 
@@ -25,7 +25,7 @@ similarity search and a Kuzu knowledge graph.
   dep, not in ours.)
 - **Tortoise ORM + aerich** for the SQLite-backed vector and history
   stores, with versioned migrations.
-- **Kuzu** for the embedded knowledge graph (entities + relations).
+- **Ladybug** for the embedded knowledge graph (entities + relations).
 - **OpenAI-SDK-compatible** provider for both chat and embeddings.
   Defaults to Mistral — swap to OpenAI / Groq / Together by changing
   `OPENAI_COMPAT_*` env vars.
@@ -51,7 +51,7 @@ backend/
 │   ├── domains/    # auth, chat, memory (business logic)
 │   └── infrastructure/
 │       ├── auth/       # bcrypt hashing, JWT issuer/verifier
-│       ├── database/   # Tortoise models + repos + Kuzu graph
+│       ├── database/   # Tortoise models + repos + Ladybug graph store
 │       └── embeddings/ # OpenAI-SDK-compatible embedder
 ├── migrations/     # aerich versioned migrations
 ├── pyproject.toml
