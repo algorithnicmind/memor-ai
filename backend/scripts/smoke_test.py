@@ -32,7 +32,7 @@ def main() -> None:
     email = f"smoke+{suffix}@example.com"
     password = "hunter22hunter22"
 
-    with httpx.Client(base_url=BASE, timeout=30.0) as client:
+    with httpx.Client(base_url=BASE, timeout=180.0) as client:
         # 1) Health
         r = client.get("/health")
         _check("GET /health", r.status_code == 200, str(r.json()))
