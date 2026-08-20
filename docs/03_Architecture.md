@@ -65,7 +65,7 @@ graph TD
     Backend --> Extraction[Memory Extraction Engine]
     
     Extraction -->|Update/Insert| VecDB[(Vector DB)]
-    Extraction -->|Nodes/Edges| GraphDB[(Kuzu Graph DB)]
+    Extraction -->|Nodes/Edges| GraphDB[(Ladybug Graph DB)]
     Extraction -->|Metadata| SQLite[(SQLite)]
     
     Backend --> Retrieval[Memory Retrieval + Context Builder]
@@ -82,7 +82,7 @@ graph TD
 
 1. **Frontend**: React-based UI featuring the chat interface and the Memory Dashboard.
 2. **Backend API**: The central coordinator handling auth, routing, and business logic.
-3. **LLM**: Generation engine (Mistral/Gemini/Local Llama). Has no native memory.
+3. **LLM**: Generation engine. Any OpenAI-SDK-compatible provider — Mistral is the default; OpenAI / Groq / Together / a local OpenAI-compatible endpoint all work. Has no native memory.
 4. **Memory Extraction Engine**: Analyzes incoming messages to extract facts, decisions, goals, etc. Calculates importance and handles duplication/conflict.
 5. **Vector Memory**: Stores dense embeddings of memories for fuzzy semantic retrieval.
 6. **Knowledge Graph**: Stores explicit entities and relationships for logical graph traversal.
@@ -145,7 +145,7 @@ graph LR
                       ▼
 ┌─────────────────────────────────────────────────────┐
 │              Database Implementations                │
-│        (SQLite, ChromaDB, Kuzu, FAISS)              │
+│        (SQLite, Ladybug, future vector stores)       │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -170,15 +170,50 @@ Pages → Components → Hooks → Store/API → Types/Utils
 
 ```text
 backend/app/
-├── api/           # Routes + Controllers
-├── engine/        # Business Logic (Extractor, Classifier, Scorer)
-├── db/            # Data Access (SQLite, ChromaDB, Kuzu)
-├── core/          # Config, Security, LLM Client
-├── schemas/       # Pydantic models
-└── utils/         # Utility functions
+├── main.py                    # FastAPI app + lifespan (Tortoise init, Memory singleton)
+├── api/                       # FastAPI routers
+│   ├── auth_routes.py         #   /auth/register, /auth/login, /auth/me, /auth/logout
+│   ├── chat_routes.py         #   /api/chat, /health
+│   ├── memory_routes.py       #   /api/memories/* CRUD
+│   ├── deps.py                #   current_user dependency + msgspec_body() decoder
+│   └── msgspec_response.py    #   to_jsonable() Struct → JSON helper
+├── core/                      # Cross-cutting infra
+│   ├── config.py              #   msgspec config structs, env-driven
+│   ├── logging_utils.py
+│   └── rate_limit.py          #   AsyncRateLimiter token bucket
+├── domains/                   # Business logic, by domain
+│   ├── auth/
+│   │   ├── models.py          #   Tortoise User
+│   │   ├── service.py         #   register / login / me
+│   │   └── schemas.py         #   msgspec DTOs
+│   ├── chat/
+│   │   └── openai_compat.py   #   OpenAI-SDK-compatible chat client + tool defs
+│   └── memory/
+│       ├── service.py         #   Memory orchestrator (add / search / get / delete / history)
+│       ├── extraction_prompts.py  # typed-fact + relation-extraction prompts
+│       └── schemas.py         #   msgspec DTOs
+└── infrastructure/            # Data + provider adapters
+    ├── auth/
+    │   ├── password.py        #   bcrypt hash/verify
+    │   └── jwt.py             #   HS256 issue/decode
+    ├── database/
+    │   ├── models.py          #   Tortoise MemoryVector + MemoryHistory
+    │   ├── tortoise_config.py #   TORTOISE_ORM dict
+    │   ├── vector_repo.py     #   cosine search on MemoryVector
+    │   ├── sqlite_repo.py     #   history queries on MemoryHistory
+    │   └── graph_repo.py      #   Ladybug graph store (Cypher)
+    └── embeddings/
+        └── openai_compat.py   #   OpenAI-SDK-compatible embedder (purpose: index/query/update)
 ```
 
 **Layer Flow:**
 ```
-API → Engine → DB → Core
+Request → api/deps (JWT → current_user) → api/msgspec_body (DTO decode)
+       → domain service (memory / chat / auth) → infrastructure (Tortoise / Ladybug / provider)
+       → domain (envelope) → api (to_jsonable) → Response
 ```
+
+**Domain boundaries (microservice-ready):** even though the whole
+backend deploys as one FastAPI process, `auth / chat / memory` live in
+separate folders with no cross-imports. A future split into three
+services would touch wiring, not code.

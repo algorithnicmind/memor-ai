@@ -1,48 +1,97 @@
 # Project Structure (Microservices & Clean Code)
 
-This document outlines the strictly decoupled, SOLID-compliant directory structure.
+This document outlines the strictly decoupled, SOLID-compliant directory
+structure. The backend is split into three domains (`auth`, `chat`,
+`memory`) that share no code with each other — they communicate only
+through the FastAPI router in `api/`.
 
 ## Root Directory
 
 ```text
 Memorai/
-├── frontend/                      # Next.js Frontend
-│   └── ... (Standard Next.js App Router structure)
+├── frontend/                      # Next.js 16 + React 19 Frontend
+│   └── ... (App Router structure)
 │
-├── backend/                       # Python FastAPI (Modular Monolith / Microservices)
+├── backend/                       # Python FastAPI (Modular Monolith)
 │   ├── app/
-│   │   ├── main.py                # FastAPI application entry point
-│   │   ├── core/                  # App configuration and security
+│   │   ├── main.py                # FastAPI app + lifespan (Tortoise init, Memory singleton)
 │   │   │
-│   │   ├── api/                   # Presentation Layer (API Gateways/Routes)
-│   │   │   ├── auth_routes.py
-│   │   │   ├── chat_routes.py
-│   │   │   └── memory_routes.py
+│   │   ├── core/                  # Cross-cutting infra
+│   │   │   ├── config.py          #   msgspec config structs (env-driven)
+│   │   │   ├── logging_utils.py
+│   │   │   └── rate_limit.py      #   AsyncRateLimiter token bucket
 │   │   │
-│   │   ├── domains/               # Business Logic Layer (Isolated Micro-domains)
-│   │   │   ├── auth/              # Auth Service Domain
-│   │   │   │   ├── service.py
-│   │   │   │   └── schemas.py
-│   │   │   │
-│   │   │   ├── chat/              # Chat Inference Service Domain
-│   │   │   │   ├── service.py     # Orchestrates LLM and Memory
-│   │   │   │   ├── mistral.py     # Mistral API Client
-│   │   │   │   └── schemas.py
-│   │   │   │
-│   │   │   └── memory/            # Memory Engine Service Domain
-│   │   │       ├── service.py     # The Core Memory Brain
-│   │   │       ├── extractor.py   # LLM Fact Extraction logic
-│   │   │       └── schemas.py
+│   │   ├── api/                   # Presentation Layer
+│   │   │   ├── auth_routes.py     #   /auth/register, /auth/login, /auth/me, /auth/logout
+│   │   │   ├── chat_routes.py     #   /api/chat, /health
+│   │   │   ├── memory_routes.py   #   /api/memories/* CRUD
+│   │   │   ├── deps.py            #   current_user + msgspec_body() decoder
+│   │   │   └── msgspec_response.py#   to_jsonable() Struct → JSON helper
 │   │   │
-│   │   └── infrastructure/        # Data Access Layer (Repositories)
+│   │   ├── domains/               # Business Logic Layer (no cross-imports)
+│   │   │   ├── auth/
+│   │   │   │   ├── models.py      #   Tortoise User
+│   │   │   │   ├── service.py     #   register / login / me
+│   │   │   │   └── schemas.py     #   msgspec DTOs
+│   │   │   ├── chat/
+│   │   │   │   └── openai_compat.py#  OpenAI-SDK-compatible chat client + tool defs
+│   │   │   └── memory/
+│   │   │       ├── service.py     #   Memory orchestrator
+│   │   │       ├── extraction_prompts.py  # typed-fact + relation prompts
+│   │   │       └── schemas.py     #   msgspec DTOs
+│   │   │
+│   │   └── infrastructure/        # Data + provider adapters
+│   │       ├── auth/
+│   │       │   ├── password.py    #   bcrypt hash/verify (direct bcrypt>=4.2 API)
+│   │       │   └── jwt.py         #   HS256 issue/decode
 │   │       ├── database/
-│   │       │   ├── sqlite_repo.py # SQLite history/vector operations
-│   │       │   └── kuzu_repo.py   # Kuzu Graph operations
+│   │       │   ├── models.py      #   Tortoise MemoryVector + MemoryHistory
+│   │       │   ├── tortoise_config.py
+│   │       │   ├── vector_repo.py #   cosine search on MemoryVector
+│   │       │   ├── sqlite_repo.py #   history queries on MemoryHistory
+│   │       │   └── graph_repo.py  #   Ladybug graph store (Cypher)
 │   │       └── embeddings/
-│   │           └── gemini.py      # Gemini Embeddings Client
+│   │           └── openai_compat.py  # OpenAI-SDK-compatible embedder
 │   │
-│   ├── tests/                     # Unit and Integration Tests
-│   └── requirements.txt
+│   ├── migrations/                # aerich versioned migrations (Tortoise)
+│   ├── scripts/
+│   │   └── smoke_test.py          # register → login → me → chat → recall → delete
+│   ├── tests/                     # (reserved)
+│   ├── pyproject.toml             # uv source of truth
+│   ├── uv.lock                    # committed
+│   ├── .env.example
+│   ├── LICENSE                    # MIT
+│   └── README.md
 │
-└── docs/                          # Documentation
+└── docs/                          # Product / tech docs
+    ├── 01_PRD.md
+    ├── 02_TRD.md
+    ├── 03_Architecture.md
+    ├── 04_HLD.md
+    ├── 05_LLD.md
+    ├── 06_DFD.md
+    ├── 07_Wireframes.md
+    ├── 08_MASTER_TODO.md
+    └── 09_Project_Structure.md
 ```
+
+## Layer Flow
+
+```
+HTTP request
+  → api/deps (JWT → current_user; msgspec_body decodes the DTO)
+  → api/<domain>_routes
+  → domains/<domain>/service
+  → infrastructure/<database|auth|embeddings>
+  → Tortoise / Ladybug / OpenAI-compatible provider
+
+Response
+  → msgspec.Struct  →  to_jsonable()  →  JSON body
+```
+
+## Why three domains, one process
+
+Each domain folder is independently importable — a future move to
+three services (Auth / Chat / Memory) touches only the FastAPI
+`lifespan` wiring and the `app.state` injection. No domain code
+changes.
