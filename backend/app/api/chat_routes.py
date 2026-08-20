@@ -17,7 +17,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import current_user, get_memory
+from app.api.deps import current_user, get_memory, msgspec_body
+from app.api.msgspec_response import to_jsonable
 from app.api.schemas import ChatRequest, ChatResponse, SearchRequest, SearchResponse
 from app.domains.auth.models import User
 from app.domains.memory.service import Memory
@@ -53,9 +54,9 @@ def _memory_context_block(memories: list[dict], relations: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-@router.post("")
+@router.post("", response_model=None)
 async def chat(
-    req: ChatRequest,
+    req: Annotated[ChatRequest, Depends(msgspec_body(ChatRequest))],
     user: Annotated[User, Depends(current_user)],
     memory: Annotated[Memory, Depends(get_memory)],
 ) -> ChatResponse:
@@ -92,16 +93,16 @@ async def chat(
     )
     response_text = raw if isinstance(raw, str) else (raw.get("content") or "")
 
-    return ChatResponse(
+    return to_jsonable(ChatResponse(
         response=response_text,
         stored=add_result.get("results", []),
         relations=recall.get("relations", []),
-    )
+    ))
 
 
-@router.post("/search")
+@router.post("/search", response_model=None)
 async def search(
-    req: SearchRequest,
+    req: Annotated[SearchRequest, Depends(msgspec_body(SearchRequest))],
     user: Annotated[User, Depends(current_user)],
     memory: Annotated[Memory, Depends(get_memory)],
 ) -> SearchResponse:
@@ -111,7 +112,7 @@ async def search(
         limit=req.limit,
         threshold=req.threshold,
     )
-    return SearchResponse(
+    return to_jsonable(SearchResponse(
         results=recall.get("results", []),
         relations=recall.get("relations", []),
-    )
+    ))

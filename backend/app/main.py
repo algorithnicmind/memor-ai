@@ -22,7 +22,7 @@ from tortoise import Tortoise
 from app.api.auth_routes import router as auth_router
 from app.api.chat_routes import router as chat_router
 from app.api.memory_routes import router as memory_router
-from app.api.msgspec_response import MsgspecJSONResponse
+from app.api.msgspec_response import MsgspecJSONResponse, to_jsonable
 from app.api.schemas import HealthResponse
 from app.core.config import get_config_from_env
 from app.core.logging_utils import setup_logging
@@ -36,7 +36,10 @@ async def lifespan(app: FastAPI):
     setup_logging()
     config = get_config_from_env()
     app.state.config = config
-    await Tortoise.init(config=TORTOISE_ORM)
+    # _enable_global_fallback=True: ASGI lifespan runs in a separate task
+    # from request handlers; without global fallback the request context
+    # can't see the connections initialised here.
+    await Tortoise.init(config=TORTOISE_ORM, _enable_global_fallback=True)
     # Auto-create tables on first run. Safe to call on every startup —
     # no-ops once the schema matches the models.
     await Tortoise.generate_schemas()
@@ -68,9 +71,9 @@ app.include_router(chat_router)
 app.include_router(memory_router)
 
 
-@app.get("/health", tags=["health"])
+@app.get("/health", tags=["health"], response_model=None)
 async def health_check() -> HealthResponse:
-    return HealthResponse(status="healthy", service="Memorai API")
+    return to_jsonable(HealthResponse(status="healthy", service="Memorai API"))
 
 
 if __name__ == "__main__":

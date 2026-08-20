@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import current_user, get_memory
+from app.api.msgspec_response import to_jsonable
 from app.api.schemas import (
     HistoryResponse,
     MemoryListResponse,
@@ -23,17 +24,17 @@ from app.domains.memory.service import Memory
 router = APIRouter(prefix="/api/memories", tags=["memories"])
 
 
-@router.get("")
+@router.get("", response_model=None)
 async def list_memories(
     user: Annotated[User, Depends(current_user)],
     memory: Annotated[Memory, Depends(get_memory)],
     limit: int = Query(default=100, ge=1, le=500),
 ) -> MemoryListResponse:
     result = await memory.get_all(user_id=user.id, limit=limit)
-    return MemoryListResponse(results=result.get("results", []))
+    return to_jsonable(MemoryListResponse(results=result.get("results", [])))
 
 
-@router.delete("/{memory_id}")
+@router.delete("/{memory_id}", response_model=None)
 async def delete_memory(
     memory_id: str,
     user: Annotated[User, Depends(current_user)],
@@ -50,19 +51,19 @@ async def delete_memory(
             status_code=status.HTTP_404_NOT_FOUND, detail="memory not found"
         )
     await memory.delete(memory_id)
-    return MessageResponse(message="Memory deleted successfully!")
+    return to_jsonable(MessageResponse(message="Memory deleted successfully!"))
 
 
-@router.delete("")
+@router.delete("", response_model=None)
 async def delete_all_memories(
     user: Annotated[User, Depends(current_user)],
     memory: Annotated[Memory, Depends(get_memory)],
 ) -> MessageResponse:
     await memory.delete_all(user_id=user.id)
-    return MessageResponse(message="Memories deleted successfully!")
+    return to_jsonable(MessageResponse(message="Memories deleted successfully!"))
 
 
-@router.get("/{memory_id}/history")
+@router.get("/{memory_id}/history", response_model=None)
 async def memory_history(
     memory_id: str,
     user: Annotated[User, Depends(current_user)],
@@ -74,4 +75,4 @@ async def memory_history(
             status_code=status.HTTP_404_NOT_FOUND, detail="memory not found"
         )
     history = await memory.history(memory_id)
-    return HistoryResponse(history=history)
+    return to_jsonable(HistoryResponse(history=history))

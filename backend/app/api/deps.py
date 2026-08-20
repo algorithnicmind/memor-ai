@@ -1,4 +1,4 @@
-"""FastAPI dependencies — `current_user` + `get_memory`.
+"""FastAPI dependencies — `current_user`, `get_memory`, `msgspec_body`.
 
 `current_user` is the auth boundary: it pulls a Bearer token off the
 request, decodes it, and resolves the User row. Routes that gate
@@ -9,12 +9,22 @@ memories).
 
 `get_memory` returns the lifespan-managed Memory singleton from
 `app.state.memory`.
+
+`msgspec_body` is the request-body bridge. FastAPI introspects typed
+parameters with Pydantic, which chokes on `msgspec.Struct`. We
+side-step that by accepting the raw `Request`, decoding with
+`msgspec.json.decode`, and presenting the result through a
+`Depends(...)`. Because FastAPI treats `Depends`-marked parameters as
+injected (not validated), the annotation on the route handler is
+purely for the editor — validation lives entirely in msgspec.
 """
 
 from __future__ import annotations
 
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, Any
 
+import msgspec.json
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
@@ -43,12 +53,12 @@ async def current_user(
         )
     try:
         user_id = decode_token(token, secret)
-    except InvalidTokenError:
+    except InvalidTokenError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from err
     user = await User.get_or_none(id=user_id)
     if user is None:
         raise HTTPException(
@@ -68,3 +78,30 @@ def get_memory(request: Request) -> Memory:
             detail="memory engine not initialised",
         )
     return memory
+
+
+def msgspec_body(model: type) -> Callable[[Request], Any]:
+    """Build a FastAPI dependency that decodes the request body into `model`.
+
+    Usage:
+        async def handler(
+            req: Annotated[RegisterRequest, Depends(msgspec_body(RegisterRequest))],
+        ) -> TokenResponse: ...
+    """
+
+    async def _decode(request: Request) -> Any:
+        raw = await request.body()
+        if not raw:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="request body required",
+            )
+        try:
+            return msgspec.json.decode(raw, type=model)
+        except msgspec.DecodeError as err:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"invalid request body: {err}",
+            ) from err
+
+    return _decode

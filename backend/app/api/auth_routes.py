@@ -10,7 +10,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import current_user
+from app.api.deps import current_user, msgspec_body
+from app.api.msgspec_response import to_jsonable
 from app.domains.auth.models import User
 from app.domains.auth.schemas import (
     LoginRequest,
@@ -23,7 +24,6 @@ from app.domains.auth.service import (
     BadCredentialsError,
     EmailTakenError,
     InvalidInputError,
-    UserNotFoundError,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -41,40 +41,49 @@ def _user_out(user: User) -> UserOut:
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
+    response_model=None,
 )
-async def register(req: RegisterRequest) -> TokenResponse:
+async def register(
+    req: Annotated[RegisterRequest, Depends(msgspec_body(RegisterRequest))],
+) -> TokenResponse:
     try:
-        return await AuthService().register(req)
+        return to_jsonable(await AuthService().register(req))
     except EmailTakenError as err:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(err)
-        )
+        ) from err
     except InvalidInputError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(err)
-        )
+        ) from err
 
 
-@router.post("/login")
-async def login(req: LoginRequest) -> TokenResponse:
+@router.post("/login", response_model=None)
+async def login(
+    req: Annotated[LoginRequest, Depends(msgspec_body(LoginRequest))],
+) -> TokenResponse:
     try:
-        return await AuthService().login(req)
+        return to_jsonable(await AuthService().login(req))
     except BadCredentialsError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(err),
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from err
 
 
-@router.get("/me")
+@router.get("/me", response_model=None)
 async def me(
     user: Annotated[User, Depends(current_user)],
 ) -> UserOut:
-    return _user_out(user)
+    return to_jsonable(_user_out(user))
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def logout(
     user: Annotated[User, Depends(current_user)],
 ) -> None:
