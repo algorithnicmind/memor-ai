@@ -1,11 +1,11 @@
 """Async rate limiter for outbound LLM calls.
 
-Each LLM-facing client (chat, embeddings) instantiates its own
-`AsyncRateLimiter` so the budgets aren't shared — chat and
-embeddings run on independent buckets. With Mistral's free-tier
-limit of ~1 RPS, both clients default to 1.5 RPS but env vars
-`LLM_CHAT_RATE_LIMIT_RPS` and `LLM_EMBED_RATE_LIMIT_RPS` tune
-them independently.
+One `AsyncRateLimiter` per kind (chat / embed), shared by every
+client of that kind in the process — `Memory.llm` and
+`GraphStore.llm` both funnel through the same chat bucket, so a
+configured `LLM_CHAT_RATE_LIMIT_RPS` actually reflects the rate
+the provider sees. Chat and embeddings have independent buckets so
+two API keys get their own quota.
 
 Ponytail: a 1-line token bucket (capacity=1, refill=1/RPS) is enough
 here. If we ever need bursts or per-key limits, swap in a real
@@ -48,15 +48,31 @@ class AsyncRateLimiter:
 
 
 def build_llm_rate_limiter(kind: ClientKind) -> AsyncRateLimiter:
-    """Build a fresh limiter per client, tuned by env.
+    """Return the shared per-kind limiter, constructing it on first use.
 
-    `LLM_CHAT_RATE_LIMIT_RPS` (default 1.5) and
-    `LLM_EMBED_RATE_LIMIT_RPS` (default 1.5) set the rates.
-    Each client calls this once on init so chat and embeddings
-    have separate buckets.
+    Two `OpenAICompatibleLLM` instances exist per process (one in
+    `Memory`, one in `GraphStore`), and same for embedders. Each one
+    building its own limiter doubles the effective RPS — and on
+    Mistral's free-tier 1 RPS, two 0.8 RPS buckets routinely produce
+    bursts that 429. Sharing the bucket per kind makes the documented
+    `LLM_CHAT_RATE_LIMIT_RPS` / `LLM_EMBED_RATE_LIMIT_RPS` actually
+    hold across every client that talks to the same provider key.
+
+    `LLM_CHAT_RATE_LIMIT_RPS` (default 0.8) and
+    `LLM_EMBED_RATE_LIMIT_RPS` (default 0.8) set the rates.
     """
+    global _chat_limiter, _embed_limiter  # noqa: PLW0603 — intentional module-level cache
     from app.core.config import get_config_from_env
 
     cfg = get_config_from_env().llm
-    rps = cfg.chat_rate_limit_rps if kind == "chat" else cfg.embed_rate_limit_rps
-    return AsyncRateLimiter(rate_per_second=rps)
+    if kind == "chat":
+        if _chat_limiter is None:
+            _chat_limiter = AsyncRateLimiter(rate_per_second=cfg.chat_rate_limit_rps)
+        return _chat_limiter
+    if _embed_limiter is None:
+        _embed_limiter = AsyncRateLimiter(rate_per_second=cfg.embed_rate_limit_rps)
+    return _embed_limiter
+
+
+_chat_limiter: AsyncRateLimiter | None = None
+_embed_limiter: AsyncRateLimiter | None = None
