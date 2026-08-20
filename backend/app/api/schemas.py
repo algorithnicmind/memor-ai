@@ -1,0 +1,50 @@
+"""HTTP DTOs — msgspec structs only.
+
+Kept loose on inner shapes (dict[str, Any]) where the underlying
+memory record is itself a JSON blob; tight on the request envelope.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import msgspec
+
+
+class ChatRequest(msgspec.Struct, kw_only=True):
+    message: str
+    metadata: dict[str, Any] | None = None
+
+
+class ChatResponse(msgspec.Struct, kw_only=True):
+    response: str
+    stored: list[dict[str, Any]] = msgspec.field(default_factory=list)
+    relations: list[dict[str, Any]] = msgspec.field(default_factory=list)
+
+
+class SearchRequest(msgspec.Struct, kw_only=True):
+    query: str
+    limit: int = 10
+    threshold: float = 0.5
+
+
+class SearchResponse(msgspec.Struct, kw_only=True):
+    results: list[dict[str, Any]]
+    relations: list[dict[str, Any]] = msgspec.field(default_factory=list)
+
+
+class MemoryListResponse(msgspec.Struct, kw_only=True):
+    results: list[dict[str, Any]]
+
+
+class HistoryResponse(msgspec.Struct, kw_only=True):
+    history: list[dict[str, Any]]
+
+
+class MessageResponse(msgspec.Struct, kw_only=True):
+    message: str
+
+
+class HealthResponse(msgspec.Struct, kw_only=True):
+    status: str
+    service: str
