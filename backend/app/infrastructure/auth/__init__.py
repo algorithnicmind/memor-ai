@@ -1,0 +1,1 @@
+"""Auth primitives — bcrypt password hashing, JWT issuance + verification."""

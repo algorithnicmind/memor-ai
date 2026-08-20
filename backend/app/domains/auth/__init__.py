@@ -1,0 +1,1 @@
+"""Auth domain — User model, DTOs, and the AuthService that ties them together."""
