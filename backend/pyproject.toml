@@ -7,22 +7,24 @@ requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "Memorai contributors" }]
 dependencies = [
+    "bcrypt>=4.2.0",
     "email-validator>=2.3.0",
     "fastapi>=0.141.1",
     "ladybug>=0.19.1",
     "msgspec>=0.21.1",
     "openai>=3.3.1",
-    "passlib[bcrypt]>=1.7.4",
     "pyjwt>=2.13.0",
     "python-dotenv>=1.2.3",
     "python-multipart>=0.0.32",
     "rank-bm25>=0.2.2",
     "tortoise-orm>=1.1.8",
+    "tzdata>=2025.2 ; sys_platform == 'win32'",
     "uvicorn[standard]>=0.52.4",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.27.0",
     "ruff>=0.15.2",
 ]
 
