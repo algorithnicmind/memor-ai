@@ -71,6 +71,11 @@ async def record_turn(
     The first user message also seeds the conversation title.
     `conversation.updated_at` is bumped so the sidebar sort works
     without a separate `last_message_at` column.
+
+    `is_ingested` is set based on role: user messages start as
+    `False` so the background drainer will extract typed memories
+    out of them; assistant messages go straight to `True` because
+    they don't carry new facts.
     """
     is_first_message = (
         await ChatMessage.filter(conversation=conversation).count() == 0
@@ -80,6 +85,7 @@ async def record_turn(
         conversation=conversation,
         role=role,
         content=content,
+        is_ingested=(role != "user"),
     )
     if is_first_message and role == "user":
         conversation.title = _title_from_first_message(content)
