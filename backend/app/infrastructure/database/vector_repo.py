@@ -1,111 +1,61 @@
+"""Vector storage on top of Tortoise ORM + SQLite.
+
+Vectors are stored as JSON-encoded lists in `MemoryVector.vector_json`;
+cosine similarity is computed in Python after fetching the (small)
+collection. This is intentionally a plain O(n) scan — the storage
+project never carries more than a few thousand rows per user.
+
+Tortoise init/close happens in the app lifespan, not here, so this
+class holds zero connection state.
 """
-Vector storage using SQLite for simplicity.
-A direct implementation that stores vectors and supports similarity search.
-"""
+
+from __future__ import annotations
 
 import json
 import logging
 import math
-from datetime import datetime
-from typing import Any, Optional
-
-import aiosqlite
+from dataclasses import dataclass
+from typing import Any, Mapping
 
 from app.core.config import VectorStoreConfig
+from app.infrastructure.database.models import MemoryVector
 
 logger = logging.getLogger(__name__)
 
 
 def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
-    """Calculate cosine similarity between two vectors.
-
-    Args:
-        vec1: First vector.
-        vec2: Second vector.
-
-    Returns:
-        Cosine similarity score between -1 and 1.
-    """
+    """Cosine similarity in [-1, 1]. Returns 0.0 for mismatched dims."""
     if len(vec1) != len(vec2):
         return 0.0
-
-    dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=True))
-    magnitude1 = math.sqrt(sum(a * a for a in vec1))
-    magnitude2 = math.sqrt(sum(b * b for b in vec2))
-
-    if magnitude1 == 0 or magnitude2 == 0:
+    dot = sum(a * b for a, b in zip(vec1, vec2, strict=True))
+    m1 = math.sqrt(sum(a * a for a in vec1))
+    m2 = math.sqrt(sum(b * b for b in vec2))
+    if m1 == 0 or m2 == 0:
         return 0.0
+    return dot / (m1 * m2)
 
-    return dot_product / (magnitude1 * magnitude2)
 
-
+@dataclass(slots=True)
 class SearchResult:
-    """Represents a search result from the vector store."""
+    id: str
+    payload: dict[str, Any]
+    score: float
 
-    def __init__(self, id: str, payload: dict[str, Any], score: float):
-        self.id = id
-        self.payload = payload
-        self.score = score
+
+def _row_to_result(row: MemoryVector, score: float) -> SearchResult:
+    return SearchResult(
+        id=row.id,
+        payload=json.loads(row.payload_json),
+        score=score,
+    )
 
 
 class VectorStore:
-    """SQLite-based vector storage with cosine similarity search."""
+    """SQLite (Tortoise) vector store with cosine search."""
 
-    def __init__(self, config: Optional[VectorStoreConfig] = None):
-        """Initialize vector store.
-
-        Args:
-            config: Optional vector store configuration.
-        """
+    def __init__(self, config: VectorStoreConfig | None = None) -> None:
         self.config = config or VectorStoreConfig()
-        self.db_path = self.config.db_path
         self.collection_name = self.config.collection_name
-        self._connection: Optional[aiosqlite.Connection] = None
-        self._initialized = False
-
-    async def _get_connection(self) -> aiosqlite.Connection:
-        """Get or create the database connection."""
-        if self._connection is None:
-            self._connection = await aiosqlite.connect(
-                self.db_path, check_same_thread=False
-            )
-            self._connection.isolation_level = None
-
-        if not self._initialized:
-            await self._create_tables()
-            self._initialized = True
-
-        return self._connection
-
-    async def _create_tables(self) -> None:
-        """Create the necessary tables."""
-        conn = self._connection
-        if conn is None:
-            raise RuntimeError("Vector store connection is not initialized")
-
-        # Vectors table - stores the actual vectors
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS vectors (
-                id TEXT PRIMARY KEY,
-                collection TEXT NOT NULL,
-                vector TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME
-            )
-        """
-        )
-
-        # Create index on collection
-        await conn.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_vectors_collection 
-            ON vectors(collection)
-        """
-        )
-
-        logger.info("Vector store tables created successfully")
 
     async def insert(
         self,
@@ -113,39 +63,18 @@ class VectorStore:
         ids: list[str],
         payloads: list[dict[str, Any]],
     ) -> list[str]:
-        """Insert vectors into the store.
-
-        Args:
-            vectors: List of embedding vectors.
-            ids: List of IDs for the vectors.
-            payloads: List of payloads (metadata) for each vector.
-
-        Returns:
-            List of inserted IDs.
-        """
-        if len(vectors) != len(ids) or len(vectors) != len(payloads):
+        if not (len(vectors) == len(ids) == len(payloads)):
             raise ValueError("vectors, ids, and payloads must have the same length")
-
-        conn = await self._get_connection()
-        now = datetime.utcnow().isoformat()
-
-        for vector, vec_id, payload in zip(vectors, ids, payloads, strict=True):
-            await conn.execute(
-                """
-                INSERT OR REPLACE INTO vectors (id, collection, vector, payload, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    vec_id,
-                    self.collection_name,
-                    json.dumps(vector),
-                    json.dumps(payload),
-                    now,
-                    now,
-                ),
+        for vec_id, vec, payload in zip(ids, vectors, payloads, strict=True):
+            await MemoryVector.update_or_create(
+                id=vec_id,
+                defaults={
+                    "collection": self.collection_name,
+                    "vector_json": json.dumps(vec),
+                    "payload_json": json.dumps(payload),
+                },
             )
-
-        logger.debug(f"Inserted {len(vectors)} vectors into {self.collection_name}")
+        logger.debug("Inserted %d vectors into %s", len(vectors), self.collection_name)
         return ids
 
     async def search(
@@ -153,230 +82,74 @@ class VectorStore:
         query: str,
         vectors: list[float],
         limit: int = 10,
-        filters: Optional[dict[str, Any]] = None,
+        filters: Mapping[str, Any] | None = None,
     ) -> list[SearchResult]:
-        """Search for similar vectors.
-
-        Args:
-            query: The query text (unused, kept for API compatibility).
-            vectors: The query vector to search against.
-            limit: Maximum number of results to return.
-            filters: Optional filters to apply (e.g., user_id, agent_id).
-
-        Returns:
-            List of SearchResult objects ordered by similarity.
-        """
-        conn = await self._get_connection()
-
-        # Fetch all vectors from the collection
-        cursor = await conn.execute(
-            """
-            SELECT id, vector, payload
-            FROM vectors
-            WHERE collection = ?
-            """,
-            (self.collection_name,),
-        )
-
-        rows = await cursor.fetchall()
-
-        results = []
+        rows = await MemoryVector.filter(collection=self.collection_name).all()
+        results: list[SearchResult] = []
         for row in rows:
-            vec_id = row[0]
-            stored_vector = json.loads(row[1])
-            payload = json.loads(row[2])
-
-            # Apply filters
-            if filters:
-                match = True
-                for key, value in filters.items():
-                    if key in payload and payload[key] != value:
-                        match = False
-                        break
-                if not match:
-                    continue
-
-            # Calculate similarity
-            score = cosine_similarity(vectors, stored_vector)
-            results.append(SearchResult(vec_id, payload, score))
-
-        # Sort by score descending and limit
-        results.sort(key=lambda x: x.score, reverse=True)
+            payload = json.loads(row.payload_json)
+            if filters and not _matches(payload, filters):
+                continue
+            stored = json.loads(row.vector_json)
+            results.append(_row_to_result(row, cosine_similarity(vectors, stored)))
+        results.sort(key=lambda r: r.score, reverse=True)
         return results[:limit]
 
-    async def get(self, vector_id: str) -> Optional[SearchResult]:
-        """Get a vector by ID.
-
-        Args:
-            vector_id: The ID of the vector to get.
-
-        Returns:
-            SearchResult if found, None otherwise.
-        """
-        conn = await self._get_connection()
-
-        cursor = await conn.execute(
-            """
-            SELECT id, payload
-            FROM vectors
-            WHERE id = ? AND collection = ?
-            """,
-            (vector_id, self.collection_name),
-        )
-
-        row = await cursor.fetchone()
-
-        if row:
-            return SearchResult(row[0], json.loads(row[1]), 1.0)
-        return None
+    async def get(self, vector_id: str) -> SearchResult | None:
+        row = await MemoryVector.get_or_none(id=vector_id, collection=self.collection_name)
+        if row is None:
+            return None
+        return _row_to_result(row, 1.0)
 
     async def update(
         self,
         vector_id: str,
-        vector: Optional[list[float]] = None,
-        payload: Optional[dict[str, Any]] = None,
+        vector: list[float] | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> bool:
-        """Update a vector.
-
-        Args:
-            vector_id: The ID of the vector to update.
-            vector: Optional new vector.
-            payload: Optional new payload.
-
-        Returns:
-            True if updated, False if not found.
-        """
-        conn = await self._get_connection()
-
-        # Get existing record
-        existing = await self.get(vector_id)
-        if not existing:
+        row = await MemoryVector.get_or_none(id=vector_id, collection=self.collection_name)
+        if row is None:
             return False
-
-        now = datetime.utcnow().isoformat()
-
-        if vector is not None and payload is not None:
-            await conn.execute(
-                """
-                UPDATE vectors SET vector = ?, payload = ?, updated_at = ?
-                WHERE id = ? AND collection = ?
-                """,
-                (
-                    json.dumps(vector),
-                    json.dumps(payload),
-                    now,
-                    vector_id,
-                    self.collection_name,
-                ),
-            )
-        elif vector is not None:
-            await conn.execute(
-                """
-                UPDATE vectors SET vector = ?, updated_at = ?
-                WHERE id = ? AND collection = ?
-                """,
-                (json.dumps(vector), now, vector_id, self.collection_name),
-            )
-        elif payload is not None:
-            await conn.execute(
-                """
-                UPDATE vectors SET payload = ?, updated_at = ?
-                WHERE id = ? AND collection = ?
-                """,
-                (json.dumps(payload), now, vector_id, self.collection_name),
-            )
-
-        logger.debug(f"Updated vector: {vector_id}")
+        if vector is not None:
+            row.vector_json = json.dumps(vector)
+        if payload is not None:
+            row.payload_json = json.dumps(payload)
+        await row.save()
         return True
 
     async def delete(self, vector_id: str) -> bool:
-        """Delete a vector.
-
-        Args:
-            vector_id: The ID of the vector to delete.
-
-        Returns:
-            True if deleted, False if not found.
-        """
-        conn = await self._get_connection()
-
-        cursor = await conn.execute(
-            """
-            DELETE FROM vectors
-            WHERE id = ? AND collection = ?
-            """,
-            (vector_id, self.collection_name),
-        )
-
-        deleted = cursor.rowcount > 0
-        if deleted:
-            logger.debug(f"Deleted vector: {vector_id}")
-        return deleted
+        deleted = await MemoryVector.filter(
+            id=vector_id, collection=self.collection_name
+        ).delete()
+        return bool(deleted)
 
     async def list(
         self,
-        filters: Optional[dict[str, Any]] = None,
+        filters: Mapping[str, Any] | None = None,
         limit: int = 100,
     ) -> tuple[list[SearchResult], int]:
-        """List all vectors in the collection.
-
-        Args:
-            filters: Optional filters to apply.
-            limit: Maximum number of results to return.
-
-        Returns:
-            Tuple of (list of SearchResult, total count).
-        """
-        conn = await self._get_connection()
-
-        cursor = await conn.execute(
-            """
-            SELECT id, payload
-            FROM vectors
-            WHERE collection = ?
-            """,
-            (self.collection_name,),
-        )
-
-        rows = await cursor.fetchall()
-
-        results = []
+        rows = await MemoryVector.filter(collection=self.collection_name).all()
+        results: list[SearchResult] = []
         for row in rows:
-            vec_id = row[0]
-            payload = json.loads(row[1])
-
-            # Apply filters
-            if filters:
-                match = True
-                for key, value in filters.items():
-                    if key in payload and payload[key] != value:
-                        match = False
-                        break
-                if not match:
-                    continue
-
-            results.append(SearchResult(vec_id, payload, 1.0))
-
+            payload = json.loads(row.payload_json)
+            if filters and not _matches(payload, filters):
+                continue
+            results.append(_row_to_result(row, 1.0))
         total = len(results)
         return results[:limit], total
 
     async def reset(self) -> None:
-        """Delete all vectors in the collection."""
-        conn = await self._get_connection()
-
-        await conn.execute(
-            """
-            DELETE FROM vectors WHERE collection = ?
-            """,
-            (self.collection_name,),
-        )
-
-        logger.info(f"Reset collection: {self.collection_name}")
+        await MemoryVector.filter(collection=self.collection_name).delete()
+        logger.info("Reset collection: %s", self.collection_name)
 
     async def close(self) -> None:
-        """Close the database connection."""
-        if self._connection:
-            await self._connection.close()
-            self._connection = None
-            self._initialized = False
-            logger.info("Vector store connection closed")
+        # No-op: Tortoise owns the connection. Provided for symmetry
+        # with the rest of the storage surface.
+        return None
+
+
+def _matches(payload: Mapping[str, Any], filters: Mapping[str, Any]) -> bool:
+    for key, value in filters.items():
+        if payload.get(key) != value:
+            return False
+    return True
