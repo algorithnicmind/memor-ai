@@ -73,3 +73,68 @@ backend/
 | `DELETE` | `/api/memories`      | JWT  | delete all for current user |
 
 Open `http://localhost:8000/docs` for Swagger UI.
+
+## Run notes / curl walkthrough
+
+```bash
+# 1. Health (no auth)
+curl -s localhost:8000/health
+
+# 2. Register
+TOKEN=$(curl -s -X POST localhost:8000/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"a@b.c","password":"hunter22hunter22","name":"Alice"}' \
+  | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+# 3. Store a statement
+curl -s -X POST localhost:8000/api/chat \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"message":"I chose Python over Go for ML work because of the ecosystem."}'
+
+# 4. List memories (user_id comes from the JWT)
+curl -s -H "authorization: Bearer $TOKEN" localhost:8000/api/memories
+
+# 5. Recall — the LLM should reference Python + ecosystem
+curl -s -X POST localhost:8000/api/chat \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"message":"Why did I pick my main language?"}'
+
+# 6. No token → 401
+curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:8000/api/chat \
+  -H 'content-type: application/json' \
+  -d '{"message":"hi"}'
+
+# 7. Delete one
+curl -s -X DELETE -H "authorization: Bearer $TOKEN" \
+  'localhost:8000/api/memories/<id>'
+```
+
+## Smoke test
+
+With the server running on `localhost:8000`:
+
+```bash
+uv run python scripts/smoke_test.py
+```
+
+Covers register → login → me → chat (store) → list → chat (recall) →
+delete → cross-user isolation → logout. Exits non-zero on the first
+failure.
+
+## Provider switch
+
+Both chat and embeddings go through the same `AsyncOpenAI` client
+configured by:
+
+| Env var | Default | Notes |
+|---|---|---|
+| `OPENAI_COMPAT_BASE_URL` | `https://api.mistral.ai/v1` | Any OpenAI-SDK-compatible URL |
+| `OPENAI_COMPAT_API_KEY`  | (required) | Provider key |
+| `OPENAI_COMPAT_CHAT_MODEL` | `mistral-large-latest` | |
+| `OPENAI_COMPAT_EMBED_MODEL` | `mistral-embed` | |
+| `EMBEDDING_DIMS` | `1024` | Match the embed model |
+
+Swap to OpenAI / Groq / Together / etc. by editing the four vars —
+no code change.
