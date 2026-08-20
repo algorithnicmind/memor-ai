@@ -58,9 +58,12 @@ pip-log.txt
 *.sqlite
 *.sqlite3
 *.db3
+*.wal
+*.shm
 kuzu_db/
 kuzu/
 *.kuzu
+data/
 
 # --------------------
 # Frontend (Node.js / Next.js)
@@ -83,3 +86,5 @@ coverage/
 # Logs
 *.log
 logs/
+/CortexDB-main
+backend/todo.md
