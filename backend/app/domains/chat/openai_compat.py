@@ -2,7 +2,7 @@
 
 The same `AsyncOpenAI` client is reused for both chat and embeddings
 elsewhere in the project — only the call surface changes. Tool
-definitions for the Kuzu graph's entity extraction / relation
+definitions for the graph store's entity extraction / relation
 establishment / graph deletion live here so the graph module doesn't
 have to know about JSON-schema details.
 """
@@ -23,7 +23,7 @@ from app.core.rate_limit import AsyncRateLimiter, build_llm_rate_limiter
 logger = logging.getLogger(__name__)
 
 
-# ---- Tool schemas (JSON-schema) for the Kuzu graph pipeline ----------
+# ---- Tool schemas (JSON-schema) for the graph store pipeline ----------
 
 EXTRACT_ENTITIES_TOOL: dict[str, Any] = {
     "type": "function",

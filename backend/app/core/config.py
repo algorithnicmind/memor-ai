@@ -49,8 +49,8 @@ def _resolve_backend_path(env_key: str, default: str, *, ensure_parent: bool = F
     """Read a path env var, resolving relative paths against the backend folder.
 
     `ensure_parent=True` creates the parent directory if it doesn't exist —
-    useful for store paths (Kuzu expects its target dir to exist before
-    opening the database file inside it).
+    useful for embedded-DB store paths that need the target dir to exist
+    before opening the database file inside it.
     """
     raw = _env_str(env_key, default)
     path = Path(raw)

@@ -1,9 +1,9 @@
-"""Kuzu-backed knowledge graph.
+"""Embedded knowledge graph store.
 
-The public surface is small: `add`, `search`, `get_all`, `delete_all`,
-`reset`. Internally the work is `extract → find_collisions →
-prune_stale → merge`, so the file reads as our own pipeline rather
-than a port of any specific generic library's shape.
+Public surface: `add`, `search`, `get_all`, `delete_all`, `reset`.
+Internal flow is `extract → find_collisions → prune_stale → merge`,
+each step's responsibility kept narrow so the diff between the
+write-path and the read-path is easy to follow.
 """
 
 from __future__ import annotations
@@ -13,14 +13,10 @@ import logging
 from typing import Any, cast
 
 try:
-    # Ladybug is the official successor to KuzuDB; ships Python 3.14
-    # Windows wheels where kuzu 0.11.3 only has up to cp312. Same
-    # C++ engine, same Cypher surface — aliased so the rest of the
-    # file can reference `kuzu` unchanged.
-    import ladybug as kuzu
+    import ladybug  # embedded graph DB with the Cypher surface
 except ImportError as err:
     raise ImportError(
-        "ladybug (kuzuDB successor) is not installed. Run: uv add ladybug"
+        "ladybug is not installed. Run: uv add ladybug"
     ) from err
 
 try:
@@ -37,7 +33,7 @@ from app.domains.chat.openai_compat import (
     RELATIONS_TOOL,
     OpenAICompatibleLLM,
 )
-from app.domains.memory.cortex_prompts import (
+from app.domains.memory.extraction_prompts import (
     EXTRACT_RELATIONS_PROMPT,
     get_delete_messages,
 )
@@ -57,15 +53,22 @@ def _normalize(s: str) -> str:
     return s.lower().replace(" ", "_")
 
 
-class KuzuGraph:
-    """Kuzu-based knowledge graph storage."""
+class GraphStore:
+    """Embedded knowledge graph storage.
+
+    Holds node + relation tables and Cypher-driven CRUD. The
+    write-path is rich (entity extraction, collision detection,
+    stale-prune, merge); the read-path is a single vector-search
+    over the entity table, optionally reranked by BM25 against the
+    relationship triples.
+    """
 
     def __init__(
         self,
         config: GraphStoreConfig | None = None,
         provider_config: ProviderConfig | None = None,
     ) -> None:
-        """Initialize Kuzu graph storage.
+        """Initialize the graph store.
 
         Args:
             config: Optional graph store configuration.
@@ -79,8 +82,8 @@ class KuzuGraph:
         self.embedding_dims = self.embedder.embedding_dims
         self.llm = OpenAICompatibleLLM(provider)
 
-        self.db = kuzu.Database(self.config.db_path)
-        self.graph = kuzu.Connection(self.db)
+        self.db = ladybug.Database(self.config.db_path)
+        self.graph = ladybug.Connection(self.db)
 
         self.node_label = ":Entity"
         self.rel_label = ":CONNECTED_TO"
@@ -116,7 +119,7 @@ class KuzuGraph:
             )
             """
         )
-        logger.info("Kuzu schema ready")
+        logger.info("Graph schema ready")
 
     def _execute(
         self, query: str, parameters: dict[str, Any] | None = None
