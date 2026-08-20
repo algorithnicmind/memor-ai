@@ -1,8 +1,6 @@
-@import "tailwindcss";
-<<<<<<< HEAD
-@import "@tailwindcss/typography";
-
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* ─── Theme Variables ─────────────────────────────────────────── */
 :root {
@@ -34,7 +32,7 @@
 
 .dark {
   /* Dark theme */
-  --bg: 222 20% 8%;
+  --bg: 0 0% 0%;
   --bg-secondary: 222 20% 11%;
   --bg-tertiary: 222 20% 14%;
   --surface: 222 20% 12%;
@@ -132,12 +130,7 @@ body {
     hsl(180, 70%, 45%) 50%,
     hsl(200, 80%, 50%) 100%
   );
-=======
 
-:root {
-  --background: #09090b;
-  --foreground: #fafafa;
-}
 
 body {
   background: var(--background);
@@ -212,14 +205,12 @@ html {
 /* Gradient text */
 .gradient-text {
   background: linear-gradient(135deg, #a78bfa, #818cf8, #6366f1);
->>>>>>> b9f5e7db42516df84d24b675dc73685daac6df49
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-<<<<<<< HEAD
-.brand-gradient-bg {
+
   background: linear-gradient(135deg,
     hsl(160, 84%, 39%) 0%,
     hsl(180, 70%, 45%) 50%,
@@ -596,7 +587,6 @@ html {
     z-index: 39;
   }
 }
-=======
 /* Glow effects */
 .glow-purple {
   box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
@@ -621,4 +611,3 @@ html {
   background-size: 200% 200%;
   animation: gradient-shift 3s ease infinite;
 }
->>>>>>> b9f5e7db42516df84d24b675dc73685daac6df49
