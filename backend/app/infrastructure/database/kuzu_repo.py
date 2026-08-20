@@ -37,8 +37,11 @@ from app.domains.chat.openai_compat import (
     RELATIONS_TOOL,
     OpenAICompatibleLLM,
 )
+from app.domains.memory.cortex_prompts import (
+    EXTRACT_RELATIONS_PROMPT,
+    get_delete_messages,
+)
 from app.infrastructure.embeddings.openai_compat import OpenAICompatibleEmbedder
-from app.domains.memory.cortex_prompts import EXTRACT_RELATIONS_PROMPT, get_delete_messages
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +173,13 @@ class KuzuGraph:
         if not raw:
             return []
         triples = [[r["source"], r["relationship"], r["destination"]] for r in raw]
-        reranked = BM25Okapi(query.split(" ")).get_top_n(triples, triples, n=limit)
+        # Tokenize the triple as a single string (source + rel + dest)
+        # so the index and the scored documents are the same shape.
+        tokenized_corpus = [
+            f"{t[0]} {t[1]} {t[2]}".lower().split() for t in triples
+        ]
+        bm25 = BM25Okapi(tokenized_corpus)
+        reranked = bm25.get_top_n(query.lower().split(), triples, n=limit)
         return [
             {"source": t[0], "relationship": t[1], "destination": t[2]}
             for t in reranked
