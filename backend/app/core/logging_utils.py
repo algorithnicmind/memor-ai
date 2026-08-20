@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class LoggingProfile:
-    """Represents a named logging profile."""
+    """A named logging configuration."""
 
     level: int
     fmt: str
@@ -55,17 +55,17 @@ def setup_logging(
     level: str | int | None = None,
     force: bool = True,
 ) -> str:
-    """Configure process-wide logging using a profile.
+    """Configure process-wide logging from a profile (or env override).
 
     Env overrides:
-    - LOG_PROFILE: quiet | standard | verbose | debug
-    - LOG_LEVEL: explicit level (e.g., DEBUG, INFO, WARNING)
+      - LOG_PROFILE: quiet | standard | verbose | debug
+      - LOG_LEVEL:   explicit level (e.g. DEBUG, INFO)
     """
     raw_profile = (
         profile if profile is not None else (os.getenv("LOG_PROFILE") or "standard")
     )
-    normalized_profile = raw_profile.strip().lower()
-    selected_profile = PROFILE_ALIASES.get(normalized_profile, normalized_profile)
+    normalized = raw_profile.strip().lower()
+    selected_profile = PROFILE_ALIASES.get(normalized, normalized)
     selected = PROFILES.get(selected_profile, PROFILES["standard"])
 
     explicit_level = level if level is not None else os.getenv("LOG_LEVEL")
@@ -73,9 +73,8 @@ def setup_logging(
     if isinstance(explicit_level, int):
         resolved_level = explicit_level
     elif isinstance(explicit_level, str) and explicit_level.strip():
-        resolved_level = logging.getLevelName(explicit_level.strip().upper())
-        if isinstance(resolved_level, str):
-            resolved_level = selected.level
+        parsed = logging.getLevelName(explicit_level.strip().upper())
+        resolved_level = parsed if isinstance(parsed, int) else selected.level
     else:
         resolved_level = selected.level
 
@@ -86,7 +85,7 @@ def setup_logging(
         force=force,
     )
 
-    for logger_name in ("httpx", "openai", "google", "google.genai", "urllib3"):
+    for logger_name in ("httpx", "openai", "urllib3"):
         logging.getLogger(logger_name).setLevel(selected.noisy_lib_level)
 
     return selected_profile if selected_profile in PROFILES else "standard"
