@@ -62,10 +62,20 @@ def _resolve_backend_path(env_key: str, default: str, *, ensure_parent: bool = F
 
 
 class ProviderConfig(msgspec.Struct, kw_only=True):
-    """OpenAI-SDK-compatible provider config — chat + embeddings share these."""
+    """OpenAI-SDK-compatible provider config.
+
+    Chat and embeddings share the base URL but can run on separate API
+    keys. Set `OPENAI_COMPAT_EMBED_API_KEY` to use a second Mistral
+    account (or a different provider entirely) for embeddings — that
+    way each key has its own RPS quota and you double the effective
+    rate limit. Leave it unset to fall back to `OPENAI_COMPAT_API_KEY`.
+    """
 
     api_key: Optional[str] = msgspec.field(
         default_factory=lambda: _env_optional("OPENAI_COMPAT_API_KEY")
+    )
+    embed_api_key: Optional[str] = msgspec.field(
+        default_factory=lambda: _env_optional("OPENAI_COMPAT_EMBED_API_KEY")
     )
     base_url: str = msgspec.field(
         default_factory=lambda: _env_str(
@@ -151,13 +161,18 @@ class LLMConfig(msgspec.Struct, kw_only=True):
     Chat and embeddings each get their own bucket (see
     `app.core.rate_limit.build_llm_rate_limiter`). Two env vars
     let providers throttle one client harder than the other.
+
+    Defaults are 0.8 RPS per client — under Mistral's free-tier
+    1 RPS limit with headroom. With separate API keys the two
+    buckets are independent, so the effective ceiling is ~1.6 RPS.
+    Bump these on paid tiers.
     """
 
     chat_rate_limit_rps: float = msgspec.field(
-        default_factory=lambda: _env_float("LLM_CHAT_RATE_LIMIT_RPS", 1.5)
+        default_factory=lambda: _env_float("LLM_CHAT_RATE_LIMIT_RPS", 0.8)
     )
     embed_rate_limit_rps: float = msgspec.field(
-        default_factory=lambda: _env_float("LLM_EMBED_RATE_LIMIT_RPS", 1.5)
+        default_factory=lambda: _env_float("LLM_EMBED_RATE_LIMIT_RPS", 0.8)
     )
 
 

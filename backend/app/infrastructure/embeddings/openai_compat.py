@@ -36,7 +36,10 @@ class OpenAICompatibleEmbedder:
             )
 
         self.client = AsyncOpenAI(
-            api_key=self.config.api_key,
+            # Fall back to the shared `api_key` when no separate
+            # embedding key is configured — keeps single-key setups
+            # working without an extra env var.
+            api_key=self.config.embed_api_key or self.config.api_key,
             base_url=self.config.base_url,
         )
         self.model = self.config.embed_model
