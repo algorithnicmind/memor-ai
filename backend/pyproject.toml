@@ -7,7 +7,6 @@ requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "Memorai contributors" }]
 dependencies = [
-    "aerich>=0.10.0",
     "email-validator>=2.3.0",
     "fastapi>=0.141.1",
     "ladybug>=0.19.1",
@@ -49,7 +48,3 @@ ignore = ["E501", "UP045"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
-
-[tool.aerich]
-tortoise_orm = "app.infrastructure.database.tortoise_config.TORTOISE_ORM"
-src_folder = "."

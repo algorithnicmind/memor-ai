@@ -37,9 +37,9 @@ similarity search and a Kuzu knowledge graph.
 cd backend
 uv sync
 cp .env.example .env         # fill in OPENAI_COMPAT_API_KEY, JWT_SECRET, ...
-uv run aerich upgrade        # apply DB migrations
 uv run uvicorn app.main:app --reload --port 8000
-```
+# Tables (User, MemoryVector, MemoryHistory) are created automatically
+# on first startup via Tortoise.generate_schemas().
 
 ## Layout
 

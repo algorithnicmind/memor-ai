@@ -37,6 +37,9 @@ async def lifespan(app: FastAPI):
     config = get_config_from_env()
     app.state.config = config
     await Tortoise.init(config=TORTOISE_ORM)
+    # Auto-create tables on first run. Safe to call on every startup —
+    # no-ops once the schema matches the models.
+    await Tortoise.generate_schemas()
     app.state.memory = Memory(config)
     try:
         yield
