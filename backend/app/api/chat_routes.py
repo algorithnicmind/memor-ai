@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.domains.memory.service import Memory
-from app.domains.memory.schemas import MemoryConfig
 from app.core.config import MemoryConfig as CoreConfig
 
 router = APIRouter()
