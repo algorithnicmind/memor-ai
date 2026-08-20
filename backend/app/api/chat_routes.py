@@ -1,12 +1,17 @@
-"""Chat route — store the message, recall related context, ask the LLM.
+"""Chat routes — store the message, recall context, ask the LLM,
+record the turn into a chat-history conversation.
 
-The route:
-  1. Reads the message from ChatRequest.
-  2. Resolves user_id from current_user (NEVER from the request body —
+Each handler:
+  1. Resolves user_id from current_user (NEVER from the request body -
      prevents forged user_id reading another user's memories).
-  3. Stores the message via memory.add() (fact extraction + graph).
-  4. Searches for related memories (vector + graph) for context.
-  5. Calls the LLM with the assembled context, returns the reply.
+  2. Stores the message via memory.add() (fact extraction + graph).
+  3. Searches for related memories (vector + graph) for context.
+  4. Calls the LLM with the assembled context.
+  5. Records both the user message and the assistant reply into a
+     ChatConversation (creating one if conversation_id is missing).
+
+The chat-history surface (conversations list, single conversation,
+delete) lives here too - it's all /api/chat/*.
 
 All handlers are async + msgspec-only; routes gated by `current_user`.
 """
@@ -19,8 +24,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import current_user, get_memory, msgspec_body
 from app.api.msgspec_response import to_jsonable
-from app.api.schemas import ChatRequest, ChatResponse, SearchRequest, SearchResponse
+from app.api.schemas import (
+    ChatMessageDTO,
+    ChatRequest,
+    ChatResponse,
+    ConversationMessagesResponse,
+    ConversationsListResponse,
+    SearchRequest,
+    SearchResponse,
+)
 from app.domains.auth.models import User
+from app.domains.chat_history import service as history_service
 from app.domains.memory.service import Memory
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -28,7 +42,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 _CHAT_SYSTEM_PROMPT = """You are Memorai, a friendly and helpful AI with perfect memory of past conversations with this user.
 
-Use the provided memories + graph relationships to give a personalised, contextual reply. Reference relevant memories naturally — don't list them.
+Use the provided memories + graph relationships to give a personalised, contextual reply. Reference relevant memories naturally - don't list them.
 
 If a memory seems outdated or contradictory, ask for clarification.
 
@@ -65,14 +79,19 @@ async def chat(
             status_code=status.HTTP_400_BAD_REQUEST, detail="message is required"
         )
 
-    # 1) Store. user_id comes from the token, never from the body.
+    # 1) Resolve or create the conversation this turn belongs to.
+    conversation = await history_service.get_or_create_conversation(
+        user, req.conversation_id
+    )
+
+    # 2) Store. user_id comes from the token, never from the body.
     add_result = await memory.add(
         req.message,
         user_id=user.id,
         metadata=req.metadata,
     )
 
-    # 2) Recall — pull the top-k memories + graph hits for context.
+    # 3) Recall - pull the top-k memories + graph hits for context.
     recall = await memory.search(
         req.message,
         user_id=user.id,
@@ -80,7 +99,7 @@ async def chat(
         threshold=0.3,
     )
 
-    # 3) Ask the LLM.
+    # 4) Ask the LLM.
     context_block = _memory_context_block(
         recall.get("results", []), recall.get("relations", [])
     )
@@ -93,10 +112,17 @@ async def chat(
     )
     response_text = raw if isinstance(raw, str) else (raw.get("content") or "")
 
+    # 5) Record the raw transcript turn. Independent of the memory store:
+    #    the typed-memory extraction above is what gets recalled later,
+    #    the chat history is what the user sees in the sidebar.
+    await history_service.record_turn(conversation, "user", req.message)
+    await history_service.record_turn(conversation, "assistant", response_text)
+
     return to_jsonable(ChatResponse(
         response=response_text,
         stored=add_result.get("results", []),
         relations=recall.get("relations", []),
+        conversation_id=conversation.id,
     ))
 
 
@@ -116,3 +142,61 @@ async def search(
         results=recall.get("results", []),
         relations=recall.get("relations", []),
     ))
+
+
+# ---- Chat history -------------------------------------------------------
+
+
+@router.get("/conversations", response_model=None)
+async def list_conversations(
+    user: Annotated[User, Depends(current_user)],
+) -> ConversationsListResponse:
+    """List the current user's chat threads, newest activity first."""
+    summaries = await history_service.list_conversations(user)
+    return to_jsonable(
+        ConversationsListResponse(conversations=summaries)  # type: ignore[arg-type]
+    )
+
+
+@router.get("/conversations/{conversation_id}/messages", response_model=None)
+async def get_conversation_messages(
+    conversation_id: str,
+    user: Annotated[User, Depends(current_user)],
+) -> ConversationMessagesResponse:
+    """Return a conversation's full message list, oldest first."""
+    convo = await history_service.get_conversation_messages(user, conversation_id)
+    if convo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found"
+        )
+    messages = sorted(
+        convo.messages,  # type: ignore[attr-defined]
+        key=lambda m: m.created_at,
+    )
+    return to_jsonable(ConversationMessagesResponse(
+        conversation_id=convo.id,
+        title=convo.title,
+        messages=[
+            ChatMessageDTO(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                created_at=m.created_at.isoformat(),
+            )
+            for m in messages
+        ],
+    ))
+
+
+@router.delete("/conversations/{conversation_id}", response_model=None)
+async def delete_conversation(
+    conversation_id: str,
+    user: Annotated[User, Depends(current_user)],
+) -> dict[str, str]:
+    """Delete a conversation thread (and its messages via FK cascade)."""
+    deleted = await history_service.delete_conversation(user, conversation_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="conversation not found"
+        )
+    return {"deleted": conversation_id}

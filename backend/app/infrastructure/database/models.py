@@ -1,12 +1,15 @@
 """Tortoise ORM models for the memory engine.
 
 Tables:
-  - memory_vectors : id, collection, vector (JSON-encoded list[float]),
-                     payload (JSON-encoded dict), timestamps.
-  - memory_history : per-memory lifecycle events (ADD / UPDATE / DELETE).
+  - memory_vectors    : id, collection, vector (JSON-encoded list[float]),
+                        payload (JSON-encoded dict), timestamps.
+  - memory_history    : per-memory lifecycle events (ADD / UPDATE / DELETE).
+  - chat_conversations: one row per conversation thread per user.
+  - chat_messages     : one row per turn (user / assistant) in a conversation.
 
-Both are SQLite-friendly; vector math runs in Python after fetch (the
-collection scale is small enough that an O(n) scan is fine).
+Chat history is intentionally separate from the typed-memory store:
+memory ingestion extracts *facts* (preferences, decisions, plans);
+chat history is the raw transcript. They serve different purposes.
 """
 
 from __future__ import annotations
@@ -45,3 +48,42 @@ class MemoryHistory(Model):
     class Meta:
         table = "memory_history"
         indexes = [("memory_id",)]
+
+
+class ChatConversation(Model):
+    """A chat thread owned by a user.
+
+    Title is auto-generated from the first user message (truncated to
+    80 chars) so the sidebar list is readable without an extra LLM call
+    on every message.
+    """
+
+    id = fields.CharField(pk=True, max_length=64)
+    user = fields.ForeignKeyField(
+        "models.User", related_name="conversations", on_delete=fields.CASCADE
+    )
+    title = fields.CharField(max_length=120)
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "chat_conversations"
+        indexes = [("user", "updated_at")]
+
+
+class ChatMessage(Model):
+    """One turn in a conversation — user message or assistant reply."""
+
+    id = fields.CharField(pk=True, max_length=64)
+    conversation = fields.ForeignKeyField(
+        "models.ChatConversation",
+        related_name="messages",
+        on_delete=fields.CASCADE,
+    )
+    role = fields.CharField(max_length=16)  # "user" | "assistant"
+    content = fields.TextField()
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "chat_messages"
+        indexes = [("conversation", "created_at")]
