@@ -23,7 +23,7 @@ from app.domains.memory.service import Memory
 router = APIRouter(prefix="/api/memories", tags=["memories"])
 
 
-@router.get("", response_model=MemoryListResponse)
+@router.get("")
 async def list_memories(
     user: Annotated[User, Depends(current_user)],
     memory: Annotated[Memory, Depends(get_memory)],
@@ -33,7 +33,7 @@ async def list_memories(
     return MemoryListResponse(results=result.get("results", []))
 
 
-@router.delete("/{memory_id}", response_model=MessageResponse)
+@router.delete("/{memory_id}")
 async def delete_memory(
     memory_id: str,
     user: Annotated[User, Depends(current_user)],
@@ -53,7 +53,7 @@ async def delete_memory(
     return MessageResponse(message="Memory deleted successfully!")
 
 
-@router.delete("", response_model=MessageResponse)
+@router.delete("")
 async def delete_all_memories(
     user: Annotated[User, Depends(current_user)],
     memory: Annotated[Memory, Depends(get_memory)],
@@ -62,7 +62,7 @@ async def delete_all_memories(
     return MessageResponse(message="Memories deleted successfully!")
 
 
-@router.get("/{memory_id}/history", response_model=HistoryResponse)
+@router.get("/{memory_id}/history")
 async def memory_history(
     memory_id: str,
     user: Annotated[User, Depends(current_user)],

@@ -53,7 +53,7 @@ def _memory_context_block(memories: list[dict], relations: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-@router.post("", response_model=ChatResponse)
+@router.post("")
 async def chat(
     req: ChatRequest,
     user: Annotated[User, Depends(current_user)],
@@ -99,7 +99,7 @@ async def chat(
     )
 
 
-@router.post("/search", response_model=SearchResponse)
+@router.post("/search")
 async def search(
     req: SearchRequest,
     user: Annotated[User, Depends(current_user)],

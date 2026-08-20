@@ -68,7 +68,7 @@ app.include_router(chat_router)
 app.include_router(memory_router)
 
 
-@app.get("/health", response_model=HealthResponse, tags=["health"])
+@app.get("/health", tags=["health"])
 async def health_check() -> HealthResponse:
     return HealthResponse(status="healthy", service="Memorai API")
 

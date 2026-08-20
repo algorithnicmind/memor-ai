@@ -40,7 +40,6 @@ def _user_out(user: User) -> UserOut:
 
 @router.post(
     "/register",
-    response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def register(req: RegisterRequest) -> TokenResponse:
@@ -56,7 +55,7 @@ async def register(req: RegisterRequest) -> TokenResponse:
         )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 async def login(req: LoginRequest) -> TokenResponse:
     try:
         return await AuthService().login(req)
@@ -68,7 +67,7 @@ async def login(req: LoginRequest) -> TokenResponse:
         )
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me")
 async def me(
     user: Annotated[User, Depends(current_user)],
 ) -> UserOut:
