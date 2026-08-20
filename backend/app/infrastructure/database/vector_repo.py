@@ -14,8 +14,9 @@ from __future__ import annotations
 import json
 import logging
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from app.core.config import VectorStoreConfig
 from app.infrastructure.database.models import MemoryVector
@@ -149,7 +150,4 @@ class VectorStore:
 
 
 def _matches(payload: Mapping[str, Any], filters: Mapping[str, Any]) -> bool:
-    for key, value in filters.items():
-        if payload.get(key) != value:
-            return False
-    return True
+    return all(payload.get(key) == value for key, value in filters.items())

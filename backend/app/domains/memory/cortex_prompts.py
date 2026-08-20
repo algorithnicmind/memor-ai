@@ -8,7 +8,6 @@ a copy of any popular generic library's templates).
 
 from datetime import datetime
 
-
 # ----------------------------------------------------------------------
 # Fact retrieval (used by Memory.add() — generic path, no type info)
 # ----------------------------------------------------------------------

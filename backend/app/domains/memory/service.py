@@ -19,7 +19,7 @@ import logging
 import re
 import uuid
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import AppConfig, get_config_from_env
@@ -71,7 +71,7 @@ _IMPORTANCE_PRIORITY = {"critical": 4, "high": 3, "normal": 2, "low": 1}
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _now_iso() -> str:

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import HistoryConfig
@@ -56,7 +56,7 @@ class HistoryStore:
             old_memory=old_memory,
             new_memory=new_memory,
             event=event,
-            created_at=created_at or datetime.now(timezone.utc),
+            created_at=created_at or datetime.now(UTC),
             updated_at=updated_at,
             is_deleted=False,
         )
@@ -78,7 +78,7 @@ class HistoryStore:
         return [_row_to_dict(r) for r in rows]
 
     async def delete_history(self, memory_id: str) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         await MemoryHistory.filter(memory_id=memory_id).update(
             is_deleted=True, updated_at=now
         )
