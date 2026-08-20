@@ -26,7 +26,7 @@ testing.
 - [x] `rank-bm25` re-ranking of graph results.
 - [x] Context Builder merges SQLite vectors and Ladybug graph hits into the Mistral prompt.
 
-## Phase 4: Frontend Integration & UI Polish  � in progress
+## Phase 4: Frontend Integration & UI Polish  🔄 in progress
 - [ ] Connect full pipeline in the UI: Message → Extract → Retrieve → Context → LLM → Response with the JWT bearer.
 - [ ] Build Memory Panel in the Chat UI (memory badges that influenced a response).
 - [ ] Build dedicated Memory Dashboard page (view, edit, delete memories).
