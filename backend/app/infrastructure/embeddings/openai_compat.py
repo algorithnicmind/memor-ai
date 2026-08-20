@@ -1,0 +1,183 @@
+"""OpenAI-SDK-compatible embedder.
+
+Uses `AsyncOpenAI` against any provider that speaks the OpenAI API
+(Mistral, OpenAI, Groq, Together, local llama.cpp, etc.).
+Swapping providers = changing `OPENAI_COMPAT_*` env vars; no code change.
+
+Includes a small in-process cache keyed by text — same input text
+returns the same embedding without a second API call.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import logging
+from typing import Any, Literal
+
+from openai import AsyncOpenAI
+
+from app.core.config import ProviderConfig
+
+logger = logging.getLogger(__name__)
+
+Purpose = Literal["index", "query", "update"]
+
+
+class OpenAICompatibleEmbedder:
+    """Provider-agnostic embedder with a simple text cache."""
+
+    def __init__(self, config: ProviderConfig | None = None) -> None:
+        self.config = config or ProviderConfig()
+        if not self.config.api_key:
+            raise ValueError(
+                "OPENAI_COMPAT_API_KEY is required for embeddings"
+            )
+
+        self.client = AsyncOpenAI(
+            api_key=self.config.api_key,
+            base_url=self.config.base_url,
+        )
+        self.model = self.config.embed_model
+        self.embedding_dims = self.config.embedding_dims
+        self._model_candidates = self._build_model_candidates(self.model)
+
+        self._cache: dict[str, list[float]] = {}
+        self._cache_max_size = 1024
+        self._cache_hits = 0
+        self._cache_misses = 0
+
+    @staticmethod
+    def _build_model_candidates(primary: str) -> list[str]:
+        """Provider-specific primary model, then common fallbacks."""
+        candidates: list[str] = []
+        normalized = primary.strip()
+        if normalized:
+            candidates.append(normalized)
+        # Mistral-style "models/" prefix is stripped by the API.
+        if normalized.startswith("models/"):
+            candidates.append(normalized.removeprefix("models/"))
+        # Common fallbacks across providers.
+        candidates.extend(["mistral-embed", "text-embedding-3-small"])
+        seen: list[str] = []
+        for name in candidates:
+            if name and name not in seen:
+                seen.append(name)
+        return seen
+
+    @staticmethod
+    def _cache_key(text: str) -> str:
+        return hashlib.md5(text.encode()).hexdigest()
+
+    def _cache_get(self, text: str) -> list[float] | None:
+        key = self._cache_key(text)
+        if key in self._cache:
+            self._cache_hits += 1
+            return self._cache[key]
+        self._cache_misses += 1
+        return None
+
+    def _cache_set(self, text: str, embedding: list[float]) -> None:
+        if len(self._cache) >= self._cache_max_size:
+            # Drop the oldest ~10% of entries (insertion-ordered).
+            evict_count = self._cache_max_size // 10
+            for key in list(self._cache.keys())[:evict_count]:
+                del self._cache[key]
+        self._cache[self._cache_key(text)] = embedding
+
+    async def embed(
+        self,
+        text: str,
+        purpose: Purpose | None = None,
+    ) -> list[float]:
+        """Return an embedding vector for `text`.
+
+        `purpose` is informational only — providers that don't support
+        asymmetric embeddings can ignore it.
+        """
+        text = text.replace("\n", " ").strip()
+        if not text:
+            return [0.0] * self.embedding_dims
+
+        cached = self._cache_get(text)
+        if cached is not None:
+            return cached
+
+        last_error: Exception | None = None
+        for candidate in self._model_candidates:
+            try:
+                response = await self.client.embeddings.create(
+                    model=candidate,
+                    input=text,
+                    dimensions=self.embedding_dims,
+                )
+                if candidate != self.model:
+                    logger.warning(
+                        "embed model '%s' unavailable; switched to '%s'",
+                        self.model,
+                        candidate,
+                    )
+                    self.model = candidate
+                vector = self._extract_vector(response)
+                self._cache_set(text, vector)
+                return vector
+            except Exception as err:  # pragma: no cover — exercised via fallback
+                last_error = err
+                continue
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Failed to generate embeddings")
+
+    @staticmethod
+    def _extract_vector(response: Any) -> list[float]:
+        """Pull the float vector out of an OpenAI-style embeddings response."""
+        item = response.data[0]
+        embedding = item.embedding
+        return [float(value) for value in embedding]
+
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Embed a batch — cache-aware, fan-out to individual calls.
+
+        Ponytail: keeps the per-item cache, runs non-cached items in
+        parallel. Add a true `embeddings.create(input=[...])` batch call
+        when a provider exposes one — most don't for the
+        asymmetric-dim case, so the simple version is fine here.
+        """
+        if not texts:
+            return []
+
+        cleaned = [t.replace("\n", " ").strip() for t in texts]
+        results: list[list[float] | None] = [None] * len(cleaned)
+        to_embed: list[tuple[int, str]] = []
+
+        for i, text in enumerate(cleaned):
+            if not text:
+                results[i] = [0.0] * self.embedding_dims
+                continue
+            cached = self._cache_get(text)
+            if cached is not None:
+                results[i] = cached
+            else:
+                to_embed.append((i, text))
+
+        if to_embed:
+            tasks = [self.embed(text) for _, text in to_embed]
+            embeddings = await asyncio.gather(*tasks)
+            for (idx, _), vector in zip(to_embed, embeddings, strict=True):
+                results[idx] = vector
+
+        return [
+            v if v is not None else [0.0] * self.embedding_dims for v in results
+        ]
+
+    def get_cache_stats(self) -> dict[str, int | str]:
+        total = self._cache_hits + self._cache_misses
+        hit_rate = self._cache_hits / total if total > 0 else 0.0
+        return {
+            "cache_size": len(self._cache),
+            "cache_max_size": self._cache_max_size,
+            "cache_hits": self._cache_hits,
+            "cache_misses": self._cache_misses,
+            "hit_rate": f"{hit_rate:.2%}",
+        }
