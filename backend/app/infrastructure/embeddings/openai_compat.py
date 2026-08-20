@@ -18,6 +18,7 @@ from typing import Any, Literal
 from openai import AsyncOpenAI
 
 from app.core.config import ProviderConfig
+from app.core.rate_limit import build_llm_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -40,16 +41,26 @@ class OpenAICompatibleEmbedder:
         )
         self.model = self.config.embed_model
         self.embedding_dims = self.config.embedding_dims
-        self._model_candidates = self._build_model_candidates(self.model)
+        self._model_candidates = self._build_model_candidates(
+            self.model, self.config.base_url
+        )
 
         self._cache: dict[str, list[float]] = {}
         self._cache_max_size = 1024
         self._cache_hits = 0
         self._cache_misses = 0
+        # Per-client limiter — embeddings doesn't share the chat bucket.
+        self._rate_limiter = build_llm_rate_limiter("embed")
 
     @staticmethod
-    def _build_model_candidates(primary: str) -> list[str]:
-        """Provider-specific primary model, then common fallbacks."""
+    def _build_model_candidates(primary: str, base_url: str) -> list[str]:
+        """Provider-specific primary model, then provider-aware fallbacks.
+
+        Mistral accepts `mistral-embed` but not OpenAI's
+        `text-embedding-3-*`; OpenAI accepts both. We pick fallbacks
+        based on the configured base URL so the embedder doesn't
+        cross-pollinate providers.
+        """
         candidates: list[str] = []
         normalized = primary.strip()
         if normalized:
@@ -57,8 +68,15 @@ class OpenAICompatibleEmbedder:
         # Mistral-style "models/" prefix is stripped by the API.
         if normalized.startswith("models/"):
             candidates.append(normalized.removeprefix("models/"))
-        # Common fallbacks across providers.
-        candidates.extend(["mistral-embed", "text-embedding-3-small"])
+
+        is_mistral = "mistral" in base_url.lower()
+        if is_mistral:
+            candidates.extend(["mistral-embed"])
+        else:
+            candidates.extend(
+                ["text-embedding-3-small", "text-embedding-3-large"]
+            )
+
         seen: list[str] = []
         for name in candidates:
             if name and name not in seen:
@@ -94,6 +112,16 @@ class OpenAICompatibleEmbedder:
 
         `purpose` is informational only — providers that don't support
         asymmetric embeddings can ignore it.
+
+        Notes on cross-provider compat:
+          - Mistral's `mistral-embed` returns fixed 1024 dims and rejects
+            a `dimensions=` parameter (422). OpenAI's
+            `text-embedding-3-*` accepts it. We probe both behaviours
+            per request: pass `dimensions` only when the primary model
+            is one we know supports it.
+          - `text-embedding-3-small` doesn't exist on Mistral, so the
+            fallback list is provider-aware (built off the configured
+            base URL).
         """
         text = text.replace("\n", " ").strip()
         if not text:
@@ -103,14 +131,24 @@ class OpenAICompatibleEmbedder:
         if cached is not None:
             return cached
 
+        # OpenAI's text-embedding-3-* honours dimensions; everything
+        # else (Mistral, etc.) doesn't. Only pass `dimensions` when
+        # it's known-safe.
+        primary_supports_dims = self.model.startswith("text-embedding-3-")
+
         last_error: Exception | None = None
         for candidate in self._model_candidates:
             try:
-                response = await self.client.embeddings.create(
-                    model=candidate,
-                    input=text,
-                    dimensions=self.embedding_dims,
-                )
+                # Per-client limiter (see app.core.rate_limit) keeps us
+                # under the provider's burst window.
+                await self._rate_limiter.acquire()
+                kwargs: dict[str, Any] = {"model": candidate, "input": text}
+                if candidate.startswith("text-embedding-3-"):
+                    kwargs["dimensions"] = self.embedding_dims
+                elif primary_supports_dims and candidate == self.model:
+                    # Only the primary OpenAI-3 model gets dims.
+                    kwargs["dimensions"] = self.embedding_dims
+                response = await self.client.embeddings.create(**kwargs)
                 if candidate != self.model:
                     logger.warning(
                         "embed model '%s' unavailable; switched to '%s'",

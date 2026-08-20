@@ -9,12 +9,18 @@ have to know about JSON-schema details.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
+import logging
 from typing import Any, cast
 
-from openai import AsyncOpenAI
+from openai import APIStatusError, AsyncOpenAI, RateLimitError
 
 from app.core.config import ProviderConfig
+from app.core.rate_limit import AsyncRateLimiter, build_llm_rate_limiter
+
+logger = logging.getLogger(__name__)
 
 
 # ---- Tool schemas (JSON-schema) for the Kuzu graph pipeline ----------
@@ -117,6 +123,7 @@ class OpenAICompatibleLLM:
             base_url=self.config.base_url,
         )
         self.model = self.config.chat_model
+        self._rate_limiter: AsyncRateLimiter = build_llm_rate_limiter("chat")
 
     @staticmethod
     def _parse_response(
@@ -132,10 +139,8 @@ class OpenAICompatibleLLM:
         for tool_call in response.choices[0].message.tool_calls or []:
             arguments = tool_call.function.arguments
             if isinstance(arguments, str):
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     arguments = json.loads(arguments)
-                except json.JSONDecodeError:
-                    pass
             parsed["tool_calls"].append(
                 {"name": tool_call.function.name, "arguments": arguments}
             )
@@ -160,8 +165,49 @@ class OpenAICompatibleLLM:
         if tools:
             params["tools"] = tools
             params["tool_choice"] = tool_choice
-        response = await self.client.chat.completions.create(**cast(Any, params))
-        return self._parse_response(response, tools)
+
+        # Retry with exponential backoff on 429 / transient 5xx — Mistral
+        # free tier rate-limits aggressively and a chat-store call may
+        # chain 3+ requests back-to-back.
+        # Per-client rate limiter (see app.core.rate_limit) keeps us
+        # below the burst window so the provider's 429 rarely fires.
+        await self._rate_limiter.acquire()
+        last_error: Exception | None = None
+        for attempt in range(5):
+            try:
+                response = await self.client.chat.completions.create(
+                    **cast(Any, params)
+                )
+                return self._parse_response(response, tools)
+            except RateLimitError as err:
+                last_error = err
+                wait = min(2 ** attempt, 30)
+                logger.warning(
+                    "LLM rate-limited (attempt %d), retrying in %ds",
+                    attempt + 1,
+                    wait,
+                )
+                await asyncio.sleep(wait)
+                # Re-acquire after the backoff so we don't burst again.
+                await self._rate_limiter.acquire()
+            except APIStatusError as err:
+                # 5xx is transient; 4xx (except 429) is not.
+                if err.status_code >= 500:
+                    last_error = err
+                    wait = min(2 ** attempt, 30)
+                    logger.warning(
+                        "LLM %d (attempt %d), retrying in %ds",
+                        err.status_code,
+                        attempt + 1,
+                        wait,
+                    )
+                    await asyncio.sleep(wait)
+                    await self._rate_limiter.acquire()
+                else:
+                    raise
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("LLM unreachable after retries")
 
     async def chat(self, message: str, system_prompt: str | None = None) -> str:
         messages: list[dict[str, str]] = []
