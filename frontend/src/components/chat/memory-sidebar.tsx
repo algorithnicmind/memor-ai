@@ -13,6 +13,7 @@ interface MemorySidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   refreshTrigger?: number;
+  onOpenDashboard?: () => void;
 }
 
 const memoryTypeColors: Record<string, string> = {
@@ -34,6 +35,7 @@ export function MemorySidebar({
   isOpen,
   onToggle,
   refreshTrigger,
+  onOpenDashboard,
 }: MemorySidebarProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -161,6 +163,17 @@ export function MemorySidebar({
                 ))
               )}
             </div>
+            {/* Dashboard Button */}
+            {onOpenDashboard && (
+              <div className="p-4 border-t border-zinc-800">
+                <Button 
+                  onClick={onOpenDashboard}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                >
+                  Open Memory Dashboard
+                </Button>
+              </div>
+            )}
           </motion.aside>
         )}
       </AnimatePresence>
