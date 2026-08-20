@@ -88,3 +88,4 @@ coverage/
 logs/
 /CortexDB-main
 backend/todo.md
+backend/memory_graph*
