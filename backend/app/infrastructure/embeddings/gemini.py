@@ -12,7 +12,7 @@ from typing import Literal
 from google import genai
 from google.genai import types
 
-from config import EmbedderConfig
+from app.core.config import EmbedderConfig
 
 logger = logging.getLogger(__name__)
 

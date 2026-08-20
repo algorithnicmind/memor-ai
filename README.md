@@ -1,129 +1,69 @@
 # Memorai
 
-**An AI Companion That Actually Remembers You**
+An AI Companion That Actually Remembers You. Memorai uses a dual-memory architecture (SQLite Vectors + Kuzu Knowledge Graph) to store, relate, and recall context seamlessly across conversations.
 
-Memorai is a specialized AI assistant with persistent, structured memory. It learns important information about a user, connects related concepts, remembers previous decisions and preferences, and uses that knowledge to provide personalized responses across conversations. It builds an evolving understanding of its user rather than just acting as a stateless chatbot.
+---
 
-## Core Philosophy
+## 🚀 How to Run the Project
 
-The Large Language Model (LLM) is merely the generation engine. **The real product is the memory architecture surrounding it.**
+Since this is a full-stack application, you need to run both the Backend (FastAPI) and the Frontend (Next.js) simultaneously in two separate terminal windows.
 
-- **Talk** → **Extract** → **Classify** → **Store** → **Connect** → **Retrieve** → **Rank** → **Personalize** → **Update** → **Evolve**
+### 1. Running the Backend (FastAPI)
+The backend manages the memory databases, LLM extraction, and API endpoints.
 
-## Architecture Principles
-
-| Principle | Description |
-|-----------|-------------|
-| **SOLID** | Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion |
-| **Clean Code** | Meaningful names, small functions, single responsibility, DRY, KISS, YAGNI |
-| **Hybrid Monorepo** | Unified repository with microservices for future scaling |
-
-## Architecture Overview
-
-Memorai operates on a dual-retrieval memory system:
-
-1. **Semantic Memory (Vector DB)**: Fuzzy matching for preferences, plans, and facts
-2. **Relational Memory (Knowledge Graph)**: Explicit relationships between extracted entities
-
-When a user asks a question, Memorai merges relevant semantic memories and graph connections, ranks them by importance and confidence, and builds a robust context prompt for the LLM.
-
-## Repository Structure
-
-```text
-memor-ai/
-├── frontend/                # Next.js Application (React + TypeScript)
-├── backend/                 # FastAPI Application (Python)
-├── services/                # Microservices (Future scaling)
-├── shared/                  # Shared types, utilities, contracts
-├── infrastructure/          # Docker, CI/CD, deployment configs
-├── docs/                    # Architectural documentation
-├── docker-compose.yml       # Local development orchestration
-└── README.md                # Main project overview
-```
-
-### Frontend (Clean Architecture)
-
-```text
-frontend/src/
-├── app/           # Next.js App Router pages
-├── components/    # Reusable React components
-├── hooks/         # Custom React hooks
-├── lib/           # API clients and utilities
-├── store/         # State management (Zustand)
-└── types/         # TypeScript type definitions
-```
-
-### Backend (SOLID + Clean Architecture)
-
-```text
-backend/app/
-├── api/           # API Layer (Controllers + Routes)
-├── engine/        # Business Logic Layer (Extractor, Classifier, Scorer)
-├── db/            # Data Access Layer (SQLite, ChromaDB, Kuzu)
-├── core/          # Cross-cutting concerns (Config, Security, LLM)
-├── schemas/       # Pydantic models (Request/Response validation)
-└── utils/         # Utility functions
-```
-
-## Documentation
-
-Comprehensive documentation can be found in the `docs/` directory:
-
-1. [PRD (Product Requirements)](docs/01_PRD.md)
-2. [TRD (Technical Requirements)](docs/02_TRD.md)
-3. [Architecture](docs/03_Architecture.md)
-4. [High-Level Design (HLD)](docs/04_HLD.md)
-5. [Low-Level Design (LLD)](docs/05_LLD.md)
-6. [Data Flow Diagrams (DFD)](docs/06_DFD.md)
-7. [Wireframes](docs/07_Wireframes.md)
-8. [Master TODO](docs/08_MASTER_TODO.md)
-9. [Project Structure](docs/09_Project_Structure.md)
-
-## Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Frontend | Next.js + React + TypeScript | User interface |
-| Styling | Tailwind CSS | Responsive design |
-| State | Zustand | Client-side state management |
-| Backend | FastAPI + Python | API server |
-| Relational DB | SQLite | Users, conversations, messages |
-| Vector DB | ChromaDB / Qdrant | Semantic search |
-| Graph DB | Kuzu | Entity relationships |
-| LLM (Local) | Ollama / Llama.cpp | Offline inference |
-| LLM (Cloud) | Mistral / Gemini API | Fallback inference |
-| Embeddings | sentence-transformers | Local embeddings |
-
-## Getting Started
+**Prerequisites**: Python 3.12+
 
 ```bash
-# Clone the repository
-git clone https://github.com/username/memor-ai.git
-cd memor-ai
+# Navigate to the backend directory
+cd backend
 
-# Start development
-make dev
+# Create a virtual environment
+python -m venv venv
 
-# Run tests
-make test
+# Activate the virtual environment
+# On Windows:
+.\venv\Scripts\activate
+# On Mac/Linux:
+source venv/bin/activate
 
-# Build for production
-make build
+# Install the dependencies (Requirements file coming soon in Phase 2)
+pip install fastapi uvicorn pydantic msgspec google-genai kuzu aiosqlite rank-bm25 openai
+
+# Run the FastAPI server
+uvicorn app.main:app --reload --port 8000
 ```
+*The API will be running at http://localhost:8000*
 
-## Implementation Phases
+---
 
-| Phase | Description | Status |
-|-------|-------------|--------|
-| Phase 1 | Foundation & Setup | Not Started |
-| Phase 2 | Core Memory Engine | Not Started |
-| Phase 3 | Vector & Graph Integration | Not Started |
-| Phase 4 | Context Building & UI Polish | Not Started |
-| Phase 5 | Testing & Optimization | Not Started |
-| Phase 6 | Microservices Extraction | Future |
+### 2. Running the Frontend (Next.js)
+The frontend is the React-based chat interface.
 
-See [Master TODO](docs/08_MASTER_TODO.md) for detailed tasks.
+**Prerequisites**: Node.js (v18+)
 
-## License
+```bash
+# Open a NEW terminal window and navigate to the frontend directory
+cd frontend
 
-CC0 1.0 Universal - Public Domain
+# Install the Node dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+*The app will be running at http://localhost:3000*
+
+---
+
+## 🛠️ Architecture Overview
+* **Frontend**: Next.js 16, React 19, Tailwind CSS, Framer Motion.
+* **Backend**: FastAPI, Python 3.12, msgspec for high-speed serialization.
+* **Database**: Embedded SQLite (Vector search) + Kuzu (Knowledge Graph).
+
+## 📄 Documentation
+For deep technical dives, refer to the `docs/` folder in this repository:
+1. `01_PRD.md` - Product Requirements & Vision
+2. `02_TRD.md` - Technology Stack specifics
+3. `04_HLD.md` - System Request Flow & Architecture
+4. `05_LLD.md` - Database Schemas & API specs
+5. `09_Project_Structure.md` - Backend Domain-Driven Design layout

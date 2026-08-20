@@ -21,15 +21,15 @@ except ImportError as err:
         "rank_bm25 is not installed. Please install it using pip install rank-bm25"
     ) from err
 
-from config import EmbedderConfig, GraphStoreConfig, LLMConfig
-from embeddings.gemini import GeminiEmbedding
-from llm.mistral import (
+from app.core.config import EmbedderConfig, GraphStoreConfig, LLMConfig
+from app.infrastructure.embeddings.gemini import GeminiEmbedding
+from app.domains.chat.mistral import (
     DELETE_MEMORY_TOOL,
     EXTRACT_ENTITIES_TOOL,
     RELATIONS_TOOL,
     MistralLLM,
 )
-from prompts import EXTRACT_RELATIONS_PROMPT, get_delete_messages
+from app.domains.memory.cortex_prompts import EXTRACT_RELATIONS_PROMPT, get_delete_messages
 
 logger = logging.getLogger(__name__)
 

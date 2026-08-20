@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 import aiosqlite
 
-from config import VectorStoreConfig
+from app.core.config import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 

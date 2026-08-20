@@ -13,17 +13,17 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any, Optional
 
-from config import MemoryConfig
-from embeddings.gemini import GeminiEmbedding
-from graph.kuzu import KuzuGraph
-from llm.mistral import MistralLLM
-from prompts import (
+from app.core.config import MemoryConfig
+from app.infrastructure.embeddings.gemini import GeminiEmbedding
+from app.infrastructure.database.kuzu_repo import KuzuGraph
+from app.domains.chat.mistral import MistralLLM
+from app.domains.memory.cortex_prompts import (
     get_fact_retrieval_messages,
     get_structured_fact_messages,
     get_update_memory_prompt,
 )
-from storage.sqlite import SQLiteStorage
-from storage.vector import SearchResult, VectorStore
+from app.infrastructure.database.sqlite_repo import SQLiteStorage
+from app.infrastructure.database.vector_repo import SearchResult, VectorStore
 
 logger = logging.getLogger(__name__)
 

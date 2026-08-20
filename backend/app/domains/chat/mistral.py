@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from openai import AsyncOpenAI
 
-from config import LLMConfig
+from app.core.config import LLMConfig
 
 # Tool definitions for graph operations
 EXTRACT_ENTITIES_TOOL = {

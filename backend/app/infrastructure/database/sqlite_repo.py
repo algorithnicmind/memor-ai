@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 import aiosqlite
 
-from config import HistoryConfig
+from app.core.config import HistoryConfig
 
 logger = logging.getLogger(__name__)
 

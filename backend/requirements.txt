@@ -1,0 +1,10 @@
+fastapi>=0.115.0
+uvicorn>=0.34.0
+pydantic>=2.10.0
+msgspec>=0.20.0
+openai>=1.0.0
+google-genai>=1.56.0
+kuzu>=0.11.3
+aiosqlite>=0.22.1
+rank-bm25>=0.2.2
+python-dotenv>=1.0.1
