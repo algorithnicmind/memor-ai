@@ -21,14 +21,14 @@ except ImportError as err:
         "rank_bm25 is not installed. Please install it using pip install rank-bm25"
     ) from err
 
-from app.core.config import EmbedderConfig, GraphStoreConfig, LLMConfig
-from app.infrastructure.embeddings.gemini import GeminiEmbedding
-from app.domains.chat.mistral import (
+from app.core.config import GraphStoreConfig, ProviderConfig
+from app.domains.chat.openai_compat import (
     DELETE_MEMORY_TOOL,
     EXTRACT_ENTITIES_TOOL,
     RELATIONS_TOOL,
-    MistralLLM,
+    OpenAICompatibleLLM,
 )
+from app.infrastructure.embeddings.openai_compat import OpenAICompatibleEmbedder
 from app.domains.memory.cortex_prompts import EXTRACT_RELATIONS_PROMPT, get_delete_messages
 
 logger = logging.getLogger(__name__)
@@ -55,24 +55,24 @@ class KuzuGraph:
     def __init__(
         self,
         config: GraphStoreConfig | None = None,
-        embedder_config: EmbedderConfig | None = None,
-        llm_config: LLMConfig | None = None,
+        provider_config: ProviderConfig | None = None,
     ) -> None:
         """Initialize Kuzu graph storage.
 
         Args:
             config: Optional graph store configuration.
-            embedder_config: Optional embedder configuration.
-            llm_config: Optional LLM configuration.
+            provider_config: Optional provider config (chat + embeddings share one).
         """
         self.config = config or GraphStoreConfig()
 
-        # Initialize embedder
-        self.embedder = GeminiEmbedding(embedder_config or EmbedderConfig())
+        provider = provider_config or ProviderConfig()
+
+        # Embeddings — same OpenAI-SDK-compatible client.
+        self.embedder = OpenAICompatibleEmbedder(provider)
         self.embedding_dims = self.embedder.embedding_dims
 
-        # Initialize LLM
-        self.llm = MistralLLM(llm_config or LLMConfig())
+        # LLM — same provider, chat surface.
+        self.llm = OpenAICompatibleLLM(provider)
 
         # Initialize Kuzu database
         self.db = kuzu.Database(self.config.db_path)
