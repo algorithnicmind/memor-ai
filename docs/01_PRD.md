@@ -26,8 +26,8 @@ Current AI chatbots suffer from **Context Amnesia**. Users are forced to repeat 
 
 ### 3.3. Structured Memory & Dual Retrieval
 Combines two powerful memory systems:
-1. **Vector Memory ("What is similar?")**: Semantic similarity via Google Gemini Embeddings and **SQLite** vector storage.
-2. **Knowledge Graph ("How are things connected?")**: Entity relationships via **Kuzu** Graph Database.
+1. **Vector Memory ("What is similar?")**: Semantic similarity via an OpenAI-SDK-compatible embedder (Mistral `mistral-embed`, 1024-dim by default) and **SQLite** vector storage managed by Tortoise ORM.
+2. **Knowledge Graph ("How are things connected?")**: Entity relationships via a **Ladybug** embedded graph database (Cypher surface, in-process).
 
 ### 3.4. Memory & Personalization Transparency
 - **Absolute Transparency**: The UI must clearly show the user *what memory data* was retrieved to generate the response. This is a critical feature to build trust.
