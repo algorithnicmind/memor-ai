@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Brain, Trash2, RefreshCw, X, User, Target, Code, Heart, Network } from "lucide-react";
+import { Brain, Trash2, RefreshCw, X, Target, Code, Heart, Network, Calendar, CheckSquare } from "lucide-react";
 import { Memory } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -59,7 +59,7 @@ export function MemorySidebar({
   }, [userId, refreshTrigger, fetchMemories]);
 
   const handleClearMemories = async () => {
-    if (!confirm("Are you sure you want to clear all memories?")) return;
+    if (!confirm("Are you sure you want to clear all memories for your account?")) return;
     try {
       await api.clearMemories();
       setMemories([]);
@@ -76,6 +76,12 @@ export function MemorySidebar({
       console.error("Failed to delete memory:", error);
     }
   };
+
+  // Group counts
+  const plans = memories.filter((m) => m.memory_type === "plan");
+  const preferences = memories.filter((m) => m.memory_type === "preference");
+  const decisions = memories.filter((m) => m.memory_type === "decision");
+  const simples = memories.filter((m) => m.memory_type === "simple");
 
   return (
     <AnimatePresence mode="wait">
@@ -103,21 +109,21 @@ export function MemorySidebar({
               <button
                 onClick={fetchMemories}
                 disabled={isLoading}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50 cursor-pointer"
                 title="Refresh Memories"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
               </button>
               <button
                 onClick={handleClearMemories}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                title="Clear All"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                title="Clear All Memories"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={onToggle}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors ml-1"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors ml-1 cursor-pointer"
                 title="Close Memory Panel"
               >
                 <X className="w-4 h-4" />
@@ -128,7 +134,7 @@ export function MemorySidebar({
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
             
-            {/* Quick Profile Summary (Wireframe Section 16) */}
+            {/* Quick Profile Summary */}
             <div className="space-y-2">
               <div className="text-[10px] font-bold text-zinc-500 tracking-wider uppercase px-1">
                 Active Knowledge Graph
@@ -137,34 +143,42 @@ export function MemorySidebar({
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-300 mb-1">
-                    <User className="w-3 h-3 text-purple-400" />
-                    <span>Profile</span>
+                    <CheckSquare className="w-3 h-3 text-purple-400" />
+                    <span>Decisions</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 truncate">CS Student</p>
-                </div>
-
-                <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-300 mb-1">
-                    <Target className="w-3 h-3 text-blue-400" />
-                    <span>Goals</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 truncate">Learn AI/ML</p>
+                  <p className="text-[11px] text-zinc-400 truncate">
+                    {decisions.length > 0 ? `${decisions.length} recorded` : "None yet"}
+                  </p>
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 mb-1">
-                    <Code className="w-3 h-3 text-emerald-400" />
-                    <span>Skills</span>
+                    <Calendar className="w-3 h-3 text-emerald-400" />
+                    <span>Plans</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 truncate">Python, React</p>
+                  <p className="text-[11px] text-zinc-400 truncate">
+                    {plans.length > 0 ? `${plans.length} tracked` : "None yet"}
+                  </p>
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold text-pink-300 mb-1">
                     <Heart className="w-3 h-3 text-pink-400" />
-                    <span>Preference</span>
+                    <span>Preferences</span>
                   </div>
-                  <p className="text-[11px] text-zinc-400 truncate">Concise code</p>
+                  <p className="text-[11px] text-zinc-400 truncate">
+                    {preferences.length > 0 ? `${preferences.length} saved` : "None yet"}
+                  </p>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-300 mb-1">
+                    <Code className="w-3 h-3 text-blue-400" />
+                    <span>Facts & Notes</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 truncate">
+                    {simples.length > 0 ? `${simples.length} facts` : "None yet"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -194,7 +208,7 @@ export function MemorySidebar({
                         </p>
                         <button
                           onClick={() => handleDeleteMemory(memory.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-all shrink-0"
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-all shrink-0 cursor-pointer"
                           title="Delete fact"
                         >
                           <Trash2 className="w-3 h-3" />
@@ -228,7 +242,7 @@ export function MemorySidebar({
             <div className="p-3 border-t border-white/[0.08] bg-zinc-950 shrink-0">
               <button
                 onClick={onOpenDashboard}
-                className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98]"
+                className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98] cursor-pointer"
               >
                 <Network className="w-3.5 h-3.5" />
                 <span>View Full Memory Dashboard</span>

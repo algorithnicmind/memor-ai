@@ -15,6 +15,7 @@ import { SettingsModal } from "@/components/ui/settings-modal";
 import { ProfileModal } from "@/components/ui/profile-modal";
 import { MemoryDashboardModal } from "@/components/ui/memory-dashboard-modal";
 import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
+
 interface ChatInterfaceProps {
   userId: string;
   onLogout: () => void;
@@ -22,6 +23,7 @@ interface ChatInterfaceProps {
 
 export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Memory Right Sidebar
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true); // Left Chat Sidebar
@@ -47,12 +49,44 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
 
   // Fetch memory count on mount and update
   useEffect(() => {
-    api.getMemories().then(res => {
+    api.getMemories().then((res) => {
       if (res && res.memories) {
         setMemoryCount(res.memories.length);
       }
     }).catch(() => {});
   }, [refreshTrigger]);
+
+  // Handle selecting a past conversation from LeftSidebar
+  const handleSelectConversation = async (conversationId: string) => {
+    if (activeConversationId === conversationId && messages.length > 0) return;
+    setActiveConversationId(conversationId);
+    setIsLoading(true);
+    try {
+      const data = await api.getConversationMessages(conversationId);
+      if (data && data.messages) {
+        const loadedMessages: Message[] = data.messages.map((m) => ({
+          id: m.id,
+          role: m.role as "user" | "assistant",
+          content: m.content,
+          timestamp: new Date(m.created_at || Date.now()),
+        }));
+        setMessages(loadedMessages);
+      }
+    } catch (err) {
+      console.error("Failed to load conversation messages:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle deleting a conversation
+  const handleDeleteConversation = (deletedId: string) => {
+    if (activeConversationId === deletedId) {
+      setActiveConversationId(null);
+      setMessages([]);
+    }
+    setRefreshTrigger((prev) => prev + 1);
+  };
 
   const handleSendMessage = async (content: string) => {
     const userMessage: Message = {
@@ -65,7 +99,11 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
     setIsLoading(true);
 
     try {
-      const response = await api.sendMessage(content);
+      const response = await api.sendMessage(content, activeConversationId);
+
+      if (response.conversation_id && response.conversation_id !== activeConversationId) {
+        setActiveConversationId(response.conversation_id);
+      }
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
@@ -78,18 +116,19 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
       };
       setMessages((prev) => [...prev, assistantMessage]);
 
-      if (response.memories_created && response.memories_created.length > 0) {
-        setRefreshTrigger((prev) => prev + 1);
-      }
+      // Trigger refreshes for sidebar lists and memory badge
+      setRefreshTrigger((prev) => prev + 1);
     } catch (error: any) {
       console.error("Chat error:", error);
-      const isAuthErr = error?.message?.toLowerCase().includes("token") || error?.message?.toLowerCase().includes("unauthorized");
+      const isAuthErr =
+        error?.message?.toLowerCase().includes("token") ||
+        error?.message?.toLowerCase().includes("unauthorized");
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: "assistant",
         content: isAuthErr
           ? "Authentication token is missing or expired. Please sign out and sign in with your credentials to connect with the memory graph."
-          : `Error from memory engine: ${error?.message || "Failed to communicate with backend. Please ensure the backend is running on port 8000."}`,
+          : `Error from memory engine: ${error?.message || "Failed to communicate with backend. Please ensure the backend is running."}`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -99,6 +138,7 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
   };
 
   const handleNewChat = () => {
+    setActiveConversationId(null);
     setMessages([]);
   };
 
@@ -123,8 +163,12 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
       <LeftSidebar 
         userId={userId} 
         isOpen={isLeftSidebarOpen}
+        activeConversationId={activeConversationId}
+        refreshTrigger={refreshTrigger}
         onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
         onNewChat={handleNewChat}
+        onSelectConversation={handleSelectConversation}
+        onDeleteConversation={handleDeleteConversation}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenDashboard={() => setIsMemoryDashboardOpen(true)}
@@ -140,7 +184,7 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
             {!isLeftSidebarOpen && (
               <button
                 onClick={() => setIsLeftSidebarOpen(true)}
-                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title="Open Sidebar"
               >
                 <PanelLeftOpen className="w-5 h-5" />
@@ -161,7 +205,7 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
             {/* Memory Panel Toggle */}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                 isSidebarOpen
                   ? "bg-purple-600 text-white border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]"
                   : "bg-white/5 text-zinc-300 border-white/10 hover:bg-white/10 hover:text-white"
@@ -180,7 +224,7 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
             {/* Profile Button */}
             <button
               onClick={() => setIsProfileOpen(true)}
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-md hover:ring-2 hover:ring-purple-400 transition-all ml-1"
+              className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white shadow-md hover:ring-2 hover:ring-purple-400 transition-all ml-1 cursor-pointer"
               title="Open Profile"
             >
               {userId.substring(0, 2).toUpperCase()}

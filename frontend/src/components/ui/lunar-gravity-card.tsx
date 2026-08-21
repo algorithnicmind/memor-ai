@@ -1,17 +1,99 @@
 "use client";
 
-import React, { useRef, useMemo, Suspense, useState } from "react";
+import React, { useRef, useMemo, Suspense, useState, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, useTexture, Environment } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 
 const RADIUS = 2.0;
 
+// High-detail procedural lunar surface texture generator (Zero network dependency, 100% offline & instant)
+function createProceduralMoonTexture(): THREE.Texture {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return new THREE.Texture();
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+
+  // Base lunar regolith gray
+  ctx.fillStyle = "#8d9095";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Maria (dark volcanic plains like Oceanus Procellarum, Mare Tranquillitatis)
+  const mariaPlains = [
+    { x: 320, y: 200, r: 170, color: "rgba(42, 45, 50, 0.70)" },
+    { x: 440, y: 160, r: 130, color: "rgba(38, 40, 46, 0.65)" },
+    { x: 230, y: 290, r: 110, color: "rgba(48, 50, 56, 0.60)" },
+    { x: 670, y: 240, r: 150, color: "rgba(44, 46, 52, 0.65)" },
+    { x: 790, y: 190, r: 120, color: "rgba(40, 42, 48, 0.60)" },
+    { x: 510, y: 350, r: 95, color: "rgba(50, 53, 58, 0.55)" },
+    { x: 150, y: 180, r: 85, color: "rgba(46, 48, 54, 0.50)" },
+  ];
+
+  mariaPlains.forEach((m) => {
+    const grad = ctx.createRadialGradient(m.x, m.y, 15, m.x, m.y, m.r);
+    grad.addColorStop(0, m.color);
+    grad.addColorStop(0.7, m.color);
+    grad.addColorStop(1, "rgba(141, 144, 149, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Impact Craters & Ejecta Rays
+  for (let i = 0; i < 400; i++) {
+    const cx = Math.random() * canvas.width;
+    const cy = Math.random() * canvas.height;
+    const cr = Math.random() * 18 + 2;
+
+    // Bright crater rim
+    ctx.strokeStyle = `rgba(235, 240, 245, ${Math.random() * 0.45 + 0.25})`;
+    ctx.lineWidth = Math.max(1, cr * 0.22);
+    ctx.beginPath();
+    ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Dark crater shadow floor
+    ctx.fillStyle = `rgba(25, 27, 30, ${Math.random() * 0.55 + 0.25})`;
+    ctx.beginPath();
+    ctx.arc(cx - cr * 0.12, cy - cr * 0.12, cr * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Central peak for large impact craters (e.g. Tycho, Copernicus)
+    if (cr > 8) {
+      ctx.fillStyle = "rgba(240, 245, 250, 0.7)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Fine surface micro-roughness
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const noise = (Math.random() - 0.5) * 26;
+    data[i] = Math.min(255, Math.max(0, data[i] + noise));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+}
+
 const RealisticMoon = ({ onClick }: { onClick?: () => void }) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
-  const colorMap = useTexture("https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg");
+  const moonTexture = useMemo(() => createProceduralMoonTexture(), []);
 
   useFrame((_, delta) => {
     if (meshRef.current) meshRef.current.rotation.y += delta * 0.05;
@@ -23,16 +105,16 @@ const RealisticMoon = ({ onClick }: { onClick?: () => void }) => {
       castShadow 
       receiveShadow 
       onClick={onClick}
-      onPointerOver={() => document.body.style.cursor = 'pointer'} 
-      onPointerOut={() => document.body.style.cursor = 'auto'}
-   >
+      onPointerOver={() => { document.body.style.cursor = 'pointer'; }} 
+      onPointerOut={() => { document.body.style.cursor = 'auto'; }}
+    >
       <sphereGeometry args={[RADIUS, 64, 64]} />
       <meshStandardMaterial 
-        map={colorMap} 
-        bumpMap={colorMap} 
-        bumpScale={0.02} 
-        roughness={0.8}
-        metalness={0.1}
+        map={moonTexture} 
+        bumpMap={moonTexture} 
+        bumpScale={0.035} 
+        roughness={0.82}
+        metalness={0.08}
       />
     </mesh>
   );
@@ -44,7 +126,7 @@ const [ringPositions, ringColors, ringRandoms] = (() => {
   const col = new Float32Array(particlesCount * 3);
   const rnd = new Float32Array(particlesCount);
 
-  for(let i=0; i<particlesCount; i++) {
+  for (let i = 0; i < particlesCount; i++) {
     const angle = Math.random() * Math.PI * 2;
 
     const rDist = Math.pow(Math.random(), 1.5);
@@ -54,9 +136,9 @@ const [ringPositions, ringColors, ringRandoms] = (() => {
     const ySpread = (Math.random() + Math.random() + Math.random() - 1.5);
     const y = ySpread * thickness; 
 
-    pos[i*3] = Math.cos(angle) * radius;
-    pos[i*3+1] = y;
-    pos[i*3+2] = Math.sin(angle) * radius;
+    pos[i * 3] = Math.cos(angle) * radius;
+    pos[i * 3 + 1] = y;
+    pos[i * 3 + 2] = Math.sin(angle) * radius;
 
     const intensity = 1.0 - rDist; 
 
@@ -77,21 +159,27 @@ const [ringPositions, ringColors, ringRandoms] = (() => {
 
     const sparkle = Math.random() > 0.95 ? 2.5 : 1.0;
 
-    col[i*3] = baseR * intensity * sparkle;     
-    col[i*3+1] = baseG * intensity * sparkle;   
-    col[i*3+2] = baseB * intensity * sparkle;   
+    col[i * 3] = baseR * intensity * sparkle;     
+    col[i * 3 + 1] = baseG * intensity * sparkle;   
+    col[i * 3 + 2] = baseB * intensity * sparkle;   
     rnd[i] = Math.random();
   }
   return [pos, col, rnd];
 })();
 
-const ParticleRing = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' | 'animating' | 'visible', massiveAsteroidsRef: React.MutableRefObject<Float32Array> }) => {
+const ParticleRing = ({
+  ringState,
+  massiveAsteroidsRef,
+}: {
+  ringState: "hidden" | "animating" | "visible";
+  massiveAsteroidsRef: React.MutableRefObject<Float32Array>;
+}) => {
   const pointsRef = useRef<THREE.Points>(null);
 
   const uniforms = useRef({
-    uProgress: { value: ringState === 'visible' ? 1.0 : 0.0 },
+    uProgress: { value: ringState === "visible" ? 1.0 : 0.0 },
     uAsteroids: { value: new Float32Array(75 * 4) },
-    time: { value: 0 }
+    time: { value: 0 },
   });
 
   useFrame((state, delta) => {
@@ -101,26 +189,26 @@ const ParticleRing = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' 
 
       const invMat = new THREE.Matrix4().copy(pointsRef.current.matrix).invert();
       const localAsteroids = new Float32Array(75 * 4);
-      for(let i=0; i<75; i++) {
+      for (let i = 0; i < 75; i++) {
         const ast = new THREE.Vector3(
-          massiveAsteroidsRef.current[i*4],
-          massiveAsteroidsRef.current[i*4+1],
-          massiveAsteroidsRef.current[i*4+2]
+          massiveAsteroidsRef.current[i * 4],
+          massiveAsteroidsRef.current[i * 4 + 1],
+          massiveAsteroidsRef.current[i * 4 + 2]
         );
         ast.applyMatrix4(invMat);
-        localAsteroids[i*4] = ast.x;
-        localAsteroids[i*4+1] = ast.y;
-        localAsteroids[i*4+2] = ast.z;
-        localAsteroids[i*4+3] = massiveAsteroidsRef.current[i*4+3];
+        localAsteroids[i * 4] = ast.x;
+        localAsteroids[i * 4 + 1] = ast.y;
+        localAsteroids[i * 4 + 2] = ast.z;
+        localAsteroids[i * 4 + 3] = massiveAsteroidsRef.current[i * 4 + 3];
       }
       uniforms.current.uAsteroids.value = localAsteroids;
     }
-    uniforms.current.time.value = state.clock.elapsedTime;
+    uniforms.current.time.value += delta;
 
-    if (ringState === 'animating') {
+    if (ringState === "animating") {
       uniforms.current.uProgress.value += delta * 0.35; 
       if (uniforms.current.uProgress.value > 1.0) uniforms.current.uProgress.value = 1.0;
-    } else if (ringState === 'visible') {
+    } else if (ringState === "visible") {
       uniforms.current.uProgress.value = 1.0;
     } else {
       uniforms.current.uProgress.value = 0.0;
@@ -261,20 +349,22 @@ const generateAsteroids = (count: number) => {
       angle, baseRadius, radialAmplitude, radialSpeed, phase, zOffset, speed,
       rx: Math.random() * Math.PI, ry: Math.random() * Math.PI, rz: Math.random() * Math.PI,
       rsx: rotationSpeedX, rsy: rotationSpeedY, rsz: rotationSpeedZ,
-      scale
+      scale,
     });
   }
   data.sort((a, b) => b.scale - a.scale);
   return data;
 };
 
-const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' | 'animating' | 'visible', massiveAsteroidsRef: React.MutableRefObject<Float32Array> }) => {
+const AsteroidBelt = ({
+  ringState,
+  massiveAsteroidsRef,
+}: {
+  ringState: "hidden" | "animating" | "visible";
+  massiveAsteroidsRef: React.MutableRefObject<Float32Array>;
+}) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-
-  const [colorMap, bumpMap] = useTexture([
-    'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg',
-    'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'
-  ]);
+  const moonTexture = useMemo(() => createProceduralMoonTexture(), []);
 
   const count = 75; 
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -286,8 +376,8 @@ const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
 
-    const targetScale = ringState === 'hidden' ? 0 : 1;
-    const lerpSpeed = ringState === 'hidden' ? 5 : 2;
+    const targetScale = ringState === "hidden" ? 0 : 1;
+    const lerpSpeed = ringState === "hidden" ? 5 : 2;
     scaleRef.current = THREE.MathUtils.lerp(scaleRef.current, targetScale, delta * lerpSpeed);
 
     if (scaleRef.current < 0.01) {
@@ -297,9 +387,7 @@ const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' 
     meshRef.current.visible = true;
 
     asteroids.forEach((ast, i) => {
-
       ast.angle += ast.speed * delta; 
-
       ast.phase += ast.radialSpeed * delta;
       let currentRadius = ast.baseRadius + Math.sin(ast.phase) * ast.radialAmplitude;
 
@@ -335,8 +423,8 @@ const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' 
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} castShadow receiveShadow>
       <dodecahedronGeometry args={[1, 0]} />
       <meshStandardMaterial 
-        map={colorMap} 
-        bumpMap={bumpMap} 
+        map={moonTexture} 
+        bumpMap={moonTexture} 
         bumpScale={0.08}
         color="#ffffff"
         roughness={0.7}
@@ -384,21 +472,23 @@ export default function LunarGravityCard({
      
       <div className="relative md:absolute md:right-0 md:top-0 w-full h-[450px] md:h-full md:w-[65%] pointer-events-auto z-0 flex items-center justify-center cursor-pointer">
         <div className="absolute inset-0 w-full h-full">
-          <Canvas shadows camera={{ position: [0, 4, 10], fov: 45 }} dpr={[1, 2]}>
-            <Environment preset="city" />
-
-            <ambientLight intensity={0.02} />
-            <directionalLight position={[8, 5, 5]} intensity={1.5} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
-            <directionalLight position={[-5, -3, -5]} intensity={0.15} color="#4a90e2" />
+          <Canvas
+            shadows={{ type: THREE.PCFShadowMap }}
+            gl={{ powerPreference: "high-performance", antialias: true }}
+            camera={{ position: [0, 4, 10], fov: 45 }}
+            dpr={[1, 2]}
+          >
+            <ambientLight intensity={0.2} />
+            <directionalLight position={[8, 5, 5]} intensity={1.8} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
+            <directionalLight position={[-5, -3, -5]} intensity={0.35} color="#8a60e2" />
 
             <OrbitControls enableZoom={false} enablePan={false} autoRotate={false} />
 
             <group rotation={[Math.PI / 8, 0, 0]}>
               <Suspense fallback={null}>
-                <RealisticMoon onClick={() => { if(ringState === 'hidden') setRingState('animating') }} />
+                <RealisticMoon onClick={() => { if (ringState === 'hidden') setRingState('animating'); }} />
                 <ParticleRing ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
                 <AsteroidBelt ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
-                <Environment preset="city" />
               </Suspense>
             </group>
           </Canvas>

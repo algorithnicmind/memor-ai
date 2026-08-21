@@ -3,8 +3,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { ChatInterface } from "@/components/chat/chat-interface";
-import { Component as LunarGravityCard } from "@/components/ui/lunar-gravity-card";
+
+const LunarGravityCard = dynamic(
+  () => import("@/components/ui/lunar-gravity-card").then((mod) => mod.Component),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full max-w-[1000px] h-[540px] bg-black/50 rounded-[2.5rem] border border-white/[0.08] flex items-center justify-center">
+        <div className="text-zinc-500 font-mono text-sm animate-pulse">Initializing Lunar Engine...</div>
+      </div>
+    ),
+  }
+);
 import {
   ArrowRight,
   Mail,
@@ -642,10 +654,14 @@ export default function Home() {
                   </p>
                 </div>
 
-                <div className="pt-6 mt-6 border-t border-white/[0.06] flex items-center text-xs font-semibold text-purple-400 group-hover:text-purple-300 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => scrollTo(howItWorksRef)}
+                  className="pt-6 mt-6 border-t border-white/[0.06] flex items-center text-xs font-semibold text-purple-400 group-hover:text-purple-300 transition-colors cursor-pointer w-full text-left"
+                >
                   <span>Learn more</span>
                   <ChevronRight className="w-3.5 h-3.5 ml-1 group-hover:translate-x-1 transition-transform" />
-                </div>
+                </button>
               </motion.div>
             ))}
           </div>
@@ -977,7 +993,10 @@ export default function Home() {
           title="CREATIVE TEAM"
           description="Meet the brilliant minds behind Memorai. We are a team of passionate engineers and designers dedicated to building the future of personalized AI."
           members={teamMembers}
-          registerLink="#"
+          onRegisterClick={() => {
+            setAuthError("");
+            setAuthModal("signup");
+          }}
           logo={<span className="text-purple-500 font-bold tracking-tighter">MEMORAI TEAM</span>}
           socialLinksMain={mainSocialLinks}
         />

@@ -93,7 +93,7 @@ class ChatMessage(Model):
     role = fields.CharField(max_length=16)  # "user" | "assistant"
     content = fields.TextField()
     created_at = fields.DatetimeField(auto_now_add=True)
-    is_ingested = fields.BooleanField(default=True)
+    is_ingested = fields.BooleanField(default=False)
     ingest_attempts = fields.IntField(default=0)
 
     class Meta:

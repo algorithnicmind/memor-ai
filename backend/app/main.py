@@ -50,7 +50,7 @@ async def _ensure_schema_columns() -> None:
     if "is_ingested" not in columns:
         await conn.execute_script(
             "ALTER TABLE chat_messages "
-            "ADD COLUMN is_ingested BOOLEAN NOT NULL DEFAULT 1"
+            "ADD COLUMN is_ingested BOOLEAN NOT NULL DEFAULT 0"
         )
     if "ingest_attempts" not in columns:
         await conn.execute_script(
@@ -100,7 +100,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -109,6 +116,17 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(memory_router)
+
+
+@app.get("/", tags=["root"], response_model=None)
+async def root():
+    return to_jsonable({
+        "service": "Memorai API",
+        "status": "online",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+    })
 
 
 @app.get("/health", tags=["health"], response_model=None)

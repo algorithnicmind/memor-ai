@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Monitor, Brain, Shield, Bell, Check, Sparkles } from "lucide-react";
+import { X, Monitor, Brain, Sparkles, Check } from "lucide-react";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -14,8 +14,62 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [aiMode, setAiMode] = useState("Cloud");
   const [autoMemory, setAutoMemory] = useState(true);
   const [indicators, setIndicators] = useState(true);
-  const [localProcessing, setLocalProcessing] = useState(false);
   const [notifications, setNotifications] = useState(true);
+  const [savedBadge, setSavedBadge] = useState(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("memorai_pref_theme");
+      if (savedTheme) setAppearance(savedTheme);
+      const savedAiMode = localStorage.getItem("memorai_pref_aimode");
+      if (savedAiMode) setAiMode(savedAiMode);
+      const savedAutoMem = localStorage.getItem("memorai_pref_automem");
+      if (savedAutoMem !== null) setAutoMemory(savedAutoMem === "true");
+      const savedInd = localStorage.getItem("memorai_pref_indicators");
+      if (savedInd !== null) setIndicators(savedInd === "true");
+      const savedNotif = localStorage.getItem("memorai_pref_notif");
+      if (savedNotif !== null) setNotifications(savedNotif === "true");
+    }
+  }, [isOpen]);
+
+  const showSavedIndicator = () => {
+    setSavedBadge(true);
+    setTimeout(() => setSavedBadge(false), 1500);
+  };
+
+  const updateAppearance = (mode: string) => {
+    setAppearance(mode);
+    localStorage.setItem("memorai_pref_theme", mode);
+    showSavedIndicator();
+  };
+
+  const updateAiMode = (mode: string) => {
+    setAiMode(mode);
+    localStorage.setItem("memorai_pref_aimode", mode);
+    showSavedIndicator();
+  };
+
+  const toggleAutoMemory = () => {
+    const val = !autoMemory;
+    setAutoMemory(val);
+    localStorage.setItem("memorai_pref_automem", String(val));
+    showSavedIndicator();
+  };
+
+  const toggleIndicators = () => {
+    const val = !indicators;
+    setIndicators(val);
+    localStorage.setItem("memorai_pref_indicators", String(val));
+    showSavedIndicator();
+  };
+
+  const toggleNotifications = () => {
+    const val = !notifications;
+    setNotifications(val);
+    localStorage.setItem("memorai_pref_notif", String(val));
+    showSavedIndicator();
+  };
 
   if (!isOpen) return null;
 
@@ -36,13 +90,28 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           className="relative w-full max-w-md bg-[#0c0c14] border border-white/[0.12] rounded-3xl shadow-2xl overflow-hidden z-10"
         >
           <div className="flex items-center justify-between p-5 border-b border-white/[0.08] bg-white/[0.02]">
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-400" />
-              Settings & Preferences
-            </h2>
-            <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-xl text-zinc-400 hover:text-white transition-colors">
-              <X className="w-4 h-4" />
-            </button>
+              <h2 className="text-base font-bold text-white">Settings & Preferences</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {savedBadge && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center gap-1 text-[11px] text-emerald-400 font-mono"
+                >
+                  <Check className="w-3 h-3" />
+                  <span>Saved</span>
+                </motion.div>
+              )}
+              <button
+                onClick={onClose}
+                className="p-1.5 hover:bg-white/10 rounded-xl text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700">
@@ -56,8 +125,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 {["Dark", "OLED", "System"].map((mode) => (
                   <button
                     key={mode}
-                    onClick={() => setAppearance(mode)}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all ${
+                    onClick={() => updateAppearance(mode)}
+                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                       appearance === mode
                         ? "border-purple-500/50 bg-purple-500/15 text-purple-200 shadow-sm"
                         : "border-white/[0.06] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
@@ -82,8 +151,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setAiMode(item.id)}
-                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all ${
+                    onClick={() => updateAiMode(item.id)}
+                    className={`py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                       aiMode === item.id
                         ? "border-indigo-500/50 bg-indigo-500/15 text-indigo-200 shadow-sm"
                         : "border-white/[0.06] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
@@ -98,9 +167,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {/* Toggles */}
             <section className="space-y-3 pt-3 border-t border-white/[0.06]">
               {[
-                { label: "Automatic Memory Extraction", desc: "Extract facts from every message in background", active: autoMemory, toggle: () => setAutoMemory(!autoMemory) },
-                { label: "Live Memory Grounding Badges", desc: "Show retrieved facts chips on assistant responses", active: indicators, toggle: () => setIndicators(!indicators) },
-                { label: "Real-time Graph Syncing", desc: "Update entity graph nodes dynamically", active: notifications, toggle: () => setNotifications(!notifications) },
+                {
+                  label: "Automatic Memory Extraction",
+                  desc: "Extract facts from every message in background",
+                  active: autoMemory,
+                  toggle: toggleAutoMemory,
+                },
+                {
+                  label: "Live Memory Grounding Badges",
+                  desc: "Show retrieved facts chips on assistant responses",
+                  active: indicators,
+                  toggle: toggleIndicators,
+                },
+                {
+                  label: "Real-time Graph Syncing",
+                  desc: "Update entity graph nodes dynamically",
+                  active: notifications,
+                  toggle: toggleNotifications,
+                },
               ].map((item, idx) => (
                 <div
                   key={idx}

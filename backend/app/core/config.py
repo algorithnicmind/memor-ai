@@ -17,10 +17,10 @@ from typing import Optional
 import msgspec
 from dotenv import load_dotenv
 
-load_dotenv()
-
-# app/core/config.py → backend/ (three parents up)
+# app/core/config.py → backend/ (two parents up: app/core/config.py -> app/core -> app -> backend)
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(_BACKEND_DIR / ".env")
+load_dotenv()
 
 
 def _env_str(key: str, default: str) -> str:

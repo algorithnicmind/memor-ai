@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, User, Target, Code, Heart, CheckSquare, Network, AlertTriangle, Trash2, RefreshCw, Sparkles, Brain } from "lucide-react";
+import { X, User, Target, Code, Heart, CheckSquare, Network, AlertTriangle, Trash2, RefreshCw, Sparkles, Brain, Search } from "lucide-react";
 import { Memory } from "@/lib/types";
 import { api } from "@/lib/api";
 
@@ -16,6 +16,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const fetchMemories = async () => {
     setIsLoading(true);
@@ -56,9 +57,11 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
     }
   };
 
-  const filteredMemories = selectedFilter === "all"
-    ? memories
-    : memories.filter((m) => m.memory_type.toLowerCase() === selectedFilter.toLowerCase());
+  const filteredMemories = memories.filter((m) => {
+    const matchesFilter = selectedFilter === "all" || m.memory_type.toLowerCase() === selectedFilter.toLowerCase();
+    const matchesQuery = !searchQuery.trim() || m.content.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFilter && matchesQuery;
+  });
 
   if (!isOpen) return null;
 
@@ -98,16 +101,16 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
               <button
                 onClick={fetchMemories}
                 disabled={isLoading}
-                className="p-2 hover:bg-white/10 rounded-xl text-zinc-400 hover:text-white transition-colors"
+                className="p-2 hover:bg-white/10 rounded-xl text-zinc-400 hover:text-white transition-colors cursor-pointer"
                 title="Refresh"
               >
                 <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
               </button>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-white/10 rounded-xl text-zinc-400 hover:text-white transition-colors"
+                className="p-2 hover:bg-white/10 rounded-xl text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -126,9 +129,9 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
                 <button
                   key={cat.type}
                   onClick={() => setSelectedFilter(cat.type)}
-                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                  className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
                     selectedFilter === cat.type
-                      ? "ring-2 ring-purple-500/50 bg-white/[0.08]"
+                      ? "ring-2 ring-purple-500/50 bg-white/[0.08] border-purple-500/40"
                       : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05]"
                   }`}
                 >
@@ -139,6 +142,18 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
                   <div className="text-xs font-semibold text-zinc-300">{cat.label}</div>
                 </button>
               ))}
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search memories and graph facts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-10 bg-white/[0.03] border border-white/[0.08] rounded-xl pl-10 pr-4 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-all"
+              />
             </div>
 
             {/* Memories List */}
@@ -152,7 +167,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
               {filteredMemories.length === 0 ? (
                 <div className="py-12 text-center rounded-2xl border border-white/[0.06] bg-white/[0.01]">
                   <Brain className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-                  <p className="text-sm text-zinc-400">No memories in this category yet.</p>
+                  <p className="text-sm text-zinc-400">No memories match the criteria.</p>
                   <p className="text-xs text-zinc-600 mt-1">Start chatting to automatically extract knowledge!</p>
                 </div>
               ) : (
@@ -176,7 +191,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
 
                       <button
                         onClick={() => handleDelete(m.id)}
-                        className="opacity-0 group-hover:opacity-100 p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0"
+                        className="opacity-0 group-hover:opacity-100 p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0 cursor-pointer"
                         title="Delete memory"
                       >
                         <Trash2 className="w-4 h-4" />

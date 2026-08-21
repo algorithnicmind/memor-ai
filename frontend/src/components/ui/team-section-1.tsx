@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 // Define interfaces for props
 interface SocialLink {
-  icon: React.ElementType; // For Shadcn icons or any SVG component
+  icon: React.ComponentType<{ className?: string }>;
   href: string;
 }
 
@@ -20,6 +20,7 @@ interface TeamSectionProps extends React.HTMLAttributes<HTMLDivElement> {
   description: string;
   members: TeamMember[];
   registerLink?: string;
+  onRegisterClick?: () => void;
   logo?: React.ReactNode; // For a custom logo, or you can use a string src
   socialLinksMain?: SocialLink[]; // Main social links for the company/section
 }
@@ -32,6 +33,7 @@ export const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
       description,
       members,
       registerLink,
+      onRegisterClick,
       logo,
       socialLinksMain,
       className,
@@ -89,14 +91,22 @@ export const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
             </div>
             <div className="flex flex-col items-center gap-4 md:items-end">
               {logo && <div className="text-2xl font-bold">{logo}</div>}
-              {registerLink && (
+              {onRegisterClick ? (
+                <button
+                  type="button"
+                  onClick={onRegisterClick}
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-white px-8 text-sm font-bold text-black shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:bg-zinc-200 hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 cursor-pointer"
+                >
+                  REGISTER NOW
+                </button>
+              ) : registerLink ? (
                 <a
                   href={registerLink}
                   className="inline-flex h-11 items-center justify-center rounded-full bg-white px-8 text-sm font-bold text-black shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:bg-zinc-200 hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                 >
                   REGISTER NOW
                 </a>
-              )}
+              ) : null}
             </div>
           </div>
 
