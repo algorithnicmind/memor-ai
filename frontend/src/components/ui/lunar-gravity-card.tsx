@@ -263,7 +263,7 @@ const generateAsteroids = (count: number) => {
     const rotationSpeedY = (Math.random() - 0.5) * 0.05;
     const rotationSpeedZ = (Math.random() - 0.5) * 0.05;
 
-    const scale = 0.005 + Math.pow(Math.random(), 4) * 0.03;
+    const scale = 0.02 + Math.pow(Math.random(), 4) * 0.18;
 
     data.push({
       angle, baseRadius, radialAmplitude, radialSpeed, phase, zOffset, speed,
@@ -395,16 +395,16 @@ export default function LunarGravityCard({
           <Canvas
             shadows={{ type: THREE.PCFShadowMap }}
             gl={{ powerPreference: "high-performance", antialias: true }}
-            camera={{ position: [0, 1.5, 10], fov: 45 }}
+            camera={{ position: [0, 4, 10], fov: 45 }}
             dpr={[1, 2]}
           >
-            <ambientLight intensity={0.01} />
-            <directionalLight position={[10, 0, 5]} intensity={2.0} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
-            <directionalLight position={[-10, -5, -5]} intensity={0.1} color="#4a90e2" />
+            <ambientLight intensity={0.2} />
+            <directionalLight position={[8, 5, 5]} intensity={1.8} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
+            <directionalLight position={[-5, -3, -5]} intensity={0.35} color="#8a60e2" />
 
             <OrbitControls enableZoom={false} enablePan={false} autoRotate={false} />
 
-            <group rotation={[Math.PI / 24, 0, -Math.PI / 32]}>
+            <group rotation={[Math.PI / 8, 0, 0]}>
               <Suspense fallback={null}>
                 <RealisticMoon onClick={() => { if (ringState === 'hidden') setRingState('animating'); }} />
                 <ParticleRing ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
