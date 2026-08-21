@@ -109,18 +109,19 @@ class OpenAICompatibleLLM:
     """Chat client over the OpenAI SDK.
 
     Any OpenAI-SDK-compatible provider works — Mistral, OpenAI, Groq,
-    Together, etc. Configure via `OPENAI_COMPAT_*` env vars.
+    Together, etc. Also supports local Ollama switching dynamically.
     """
 
     def __init__(self, config: ProviderConfig | None = None) -> None:
         self.config = config or ProviderConfig()
-        if not self.config.api_key:
-            raise ValueError(
-                "OPENAI_COMPAT_API_KEY is required to construct an LLM client"
-            )
+        api_key = self.config.api_key or "ollama"
         self.client = AsyncOpenAI(
-            api_key=self.config.api_key,
+            api_key=api_key,
             base_url=self.config.base_url,
+        )
+        self.local_client = AsyncOpenAI(
+            api_key="ollama",
+            base_url="http://localhost:11434/v1",
         )
         self.model = self.config.chat_model
         self._rate_limiter: AsyncRateLimiter = build_llm_rate_limiter("chat")
@@ -152,10 +153,21 @@ class OpenAICompatibleLLM:
         response_format: dict[str, Any] | None = None,
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str = "auto",
+        model: str | None = None,
+        provider: str | None = None,
         **kwargs: Any,
     ) -> str | dict[str, Any]:
+        # Determine whether to use local Ollama or cloud client
+        is_local = (
+            provider in ("local", "ollama")
+            or (model and ("qwen" in model.lower() or "llama" in model.lower() or "ollama" in model.lower()))
+            or ("11434" in self.config.base_url)
+        )
+        active_client = self.local_client if is_local else self.client
+        active_model = model or (self.model if not is_local else "qwen2.5-coder:7b")
+
         params: dict[str, Any] = {
-            "model": self.model,
+            "model": active_model,
             "messages": messages,
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
@@ -166,35 +178,32 @@ class OpenAICompatibleLLM:
             params["tools"] = tools
             params["tool_choice"] = tool_choice
 
-        # Retry with exponential backoff on 429 / transient 5xx — Mistral
-        # free tier rate-limits aggressively and a chat-store call may
-        # chain 3+ requests back-to-back.
-        # Per-client rate limiter (see app.core.rate_limit) keeps us
-        # below the burst window so the provider's 429 rarely fires.
-        await self._rate_limiter.acquire()
+        # When calling local Ollama, rate limiter is not strictly needed, but safe
+        if not is_local:
+            await self._rate_limiter.acquire()
+
         last_error: Exception | None = None
-        for attempt in range(5):
+        for attempt in range(4):
             try:
-                response = await self.client.chat.completions.create(
+                response = await active_client.chat.completions.create(
                     **cast(Any, params)
                 )
                 return self._parse_response(response, tools)
             except RateLimitError as err:
                 last_error = err
-                wait = min(2 ** attempt, 30)
+                wait = min(2 ** attempt, 20)
                 logger.warning(
                     "LLM rate-limited (attempt %d), retrying in %ds",
                     attempt + 1,
                     wait,
                 )
                 await asyncio.sleep(wait)
-                # Re-acquire after the backoff so we don't burst again.
-                await self._rate_limiter.acquire()
+                if not is_local:
+                    await self._rate_limiter.acquire()
             except APIStatusError as err:
-                # 5xx is transient; 4xx (except 429) is not.
                 if err.status_code >= 500:
                     last_error = err
-                    wait = min(2 ** attempt, 30)
+                    wait = min(2 ** attempt, 20)
                     logger.warning(
                         "LLM %d (attempt %d), retrying in %ds",
                         err.status_code,
@@ -202,9 +211,23 @@ class OpenAICompatibleLLM:
                         wait,
                     )
                     await asyncio.sleep(wait)
-                    await self._rate_limiter.acquire()
+                    if not is_local:
+                        await self._rate_limiter.acquire()
                 else:
                     raise
+            except Exception as err:
+                last_error = err
+                # If cloud client failed due to connection error / offline, try local Ollama automatically
+                if not is_local:
+                    try:
+                        logger.info("Cloud LLM unreachable. Attempting fallback to local Ollama...")
+                        params["model"] = "qwen2.5-coder:7b"
+                        local_resp = await self.local_client.chat.completions.create(**cast(Any, params))
+                        return self._parse_response(local_resp, tools)
+                    except Exception:
+                        pass
+                break
+
         if last_error is not None:
             raise last_error
         raise RuntimeError("LLM unreachable after retries")

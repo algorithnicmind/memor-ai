@@ -8,6 +8,7 @@ import { ChatInput } from "./chat-input";
 import { TypingIndicator } from "./typing-indicator";
 import { MemorySidebar } from "./memory-sidebar";
 import { LeftSidebar } from "./left-sidebar";
+import { ModelSelector } from "./model-selector";
 import { Message } from "@/lib/types";
 import { api } from "@/lib/api";
 import { Brain, PanelLeftOpen, Sparkles } from "lucide-react";
@@ -29,6 +30,29 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true); // Left Chat Sidebar
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [memoryCount, setMemoryCount] = useState<number>(0);
+
+  // Model & Provider Selection State (Cloud vs Local Ollama)
+  const [selectedModel, setSelectedModel] = useState<string>("open-mistral-nemo");
+  const [selectedProvider, setSelectedProvider] = useState<"cloud" | "local">("cloud");
+
+  // Load saved model preference on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedModel = localStorage.getItem("memorai_selected_model");
+      if (savedModel) setSelectedModel(savedModel);
+      const savedProvider = localStorage.getItem("memorai_selected_provider") as "cloud" | "local" | null;
+      if (savedProvider) setSelectedProvider(savedProvider);
+    }
+  }, []);
+
+  const handleSelectModel = (modelId: string, provider: "cloud" | "local") => {
+    setSelectedModel(modelId);
+    setSelectedProvider(provider);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("memorai_selected_model", modelId);
+      localStorage.setItem("memorai_selected_provider", provider);
+    }
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -99,7 +123,13 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
     setIsLoading(true);
 
     try {
-      const response = await api.sendMessage(content, activeConversationId);
+      const response = await api.sendMessage(
+        content,
+        activeConversationId,
+        undefined,
+        selectedModel,
+        selectedProvider
+      );
 
       if (response.conversation_id && response.conversation_id !== activeConversationId) {
         setActiveConversationId(response.conversation_id);
@@ -197,6 +227,15 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
                 <Sparkles className="w-3 h-3 text-purple-400" />
                 Memory Active
               </div>
+            </div>
+
+            {/* Model Selector Dropdown (Cloud vs Local Ollama) */}
+            <div className="ml-1 sm:ml-2">
+              <ModelSelector
+                selectedModel={selectedModel}
+                selectedProvider={selectedProvider}
+                onSelectModel={handleSelectModel}
+              />
             </div>
           </div>
 

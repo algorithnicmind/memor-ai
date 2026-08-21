@@ -14,7 +14,7 @@ import sys
 import uvicorn
 
 
-def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+def is_port_in_use(port: int, host: str = "0.0.0.0") -> bool:
     """Check whether a local TCP port is already in use."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.5)
@@ -46,7 +46,7 @@ def find_available_port(preferred_port: int, fallback_ports: list[int] | None = 
 def main():
     parser = argparse.ArgumentParser(description="Memorai Backend Runner")
     parser.add_argument("--port", type=int, default=8005, help="Preferred port (default: 8005)")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host binding (default: 127.0.0.1)")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host binding (default: 0.0.0.0)")
     parser.add_argument("--reload", action="store_true", default=True, help="Enable auto-reload")
     parser.add_argument("--auto-port", action="store_true", default=True, help="Auto-switch to available port if occupied")
 

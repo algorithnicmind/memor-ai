@@ -129,6 +129,8 @@ class Memory:
         run_id: str | None = None,
         metadata: dict[str, Any] | None = None,
         infer: bool = True,
+        model: str | None = None,
+        provider: str | None = None,
     ) -> dict[str, Any]:
         filters = self._build_filters(user_id, agent_id, run_id)
         normalized = self._coerce_messages(messages)
@@ -136,7 +138,9 @@ class Memory:
         base_meta.update(filters)
         if not infer:
             return await self._add_direct(normalized, base_meta)
-        return await self._add_with_inference(normalized, base_meta, filters)
+        return await self._add_with_inference(
+            normalized, base_meta, filters, model=model, provider=provider
+        )
 
     async def add_structured(
         self,
@@ -365,15 +369,21 @@ class Memory:
         messages: list[dict[str, Any]],
         metadata: dict[str, Any],
         filters: dict[str, Any],
+        model: str | None = None,
+        provider: str | None = None,
     ) -> dict[str, Any]:
         transcript = format_chat(messages)
-        new_facts = await self._extract_facts(transcript, messages, metadata)
+        new_facts = await self._extract_facts(
+            transcript, messages, metadata, model=model, provider=provider
+        )
 
         if not new_facts:
             return {"results": []}
 
         existing, new_embeddings = await self._find_collisions(new_facts, filters)
-        actions = await self._resolve_actions(existing=existing, new_facts=new_facts)
+        actions = await self._resolve_actions(
+            existing=existing, new_facts=new_facts, model=model, provider=provider
+        )
         return await self._apply_actions(
             actions=actions,
             existing=existing,
@@ -388,6 +398,8 @@ class Memory:
         transcript: str,
         messages: list[dict[str, Any]],
         metadata: dict[str, Any],
+        model: str | None = None,
+        provider: str | None = None,
     ) -> list[str]:
         has_assistant = any(msg.get("role") == "assistant" for msg in messages)
         is_agent_memory = (
@@ -402,6 +414,8 @@ class Memory:
                 {"role": "user", "content": user_prompt},
             ],
             response_format={"type": "json_object"},
+            model=model,
+            provider=provider,
         )
         if self.graph:
             try:
@@ -479,6 +493,8 @@ class Memory:
         self,
         existing: list[dict[str, str]],
         new_facts: list[str],
+        model: str | None = None,
+        provider: str | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Ask the LLM whether each fact is ADD / UPDATE / DELETE / NONE."""
         if not new_facts:
@@ -495,6 +511,8 @@ class Memory:
             response = await self.llm.generate_response(
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
+                model=model,
+                provider=provider,
             )
         except Exception:
             logger.exception("Memory-action resolution failed")
@@ -506,7 +524,18 @@ class Memory:
                 else str(response.get("content", ""))
             )
             text = strip_code_fences(text)
-            return json.loads(text) if text.strip() else {"memory": []}
+            if not text.strip():
+                return {"memory": []}
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return {"memory": parsed}
+            elif isinstance(parsed, dict) and "memory" not in parsed:
+                # In case it returned a dict but not with the 'memory' key
+                # We might want to just wrap the whole dict or assume empty?
+                # Usually if there's no memory key, we can try to find list values or just default.
+                # Since the prompt expects {"memory": ...}, let's just return what we have if it has it.
+                return parsed if "memory" in parsed else {"memory": []}
+            return parsed
         except Exception:
             logger.exception("Action JSON parse failed")
             return {"memory": []}

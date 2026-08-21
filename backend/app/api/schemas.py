@@ -15,6 +15,24 @@ class ChatRequest(msgspec.Struct, kw_only=True):
     message: str
     metadata: dict[str, Any] | None = None
     conversation_id: str | None = None
+    model: str | None = None
+    provider: str | None = None  # "cloud" | "local" | "ollama"
+
+
+class ModelOption(msgspec.Struct, kw_only=True):
+    id: str
+    name: str
+    provider: str  # "cloud" | "local"
+    description: str
+    is_local: bool
+    is_available: bool
+
+
+class ModelsListResponse(msgspec.Struct, kw_only=True):
+    active_model: str
+    active_provider: str
+    models: list[ModelOption]
+    ollama_running: bool
 
 
 class ChatResponse(msgspec.Struct, kw_only=True):

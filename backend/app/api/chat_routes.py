@@ -33,6 +33,8 @@ from app.api.schemas import (
     ChatResponse,
     ConversationMessagesResponse,
     ConversationsListResponse,
+    ModelOption,
+    ModelsListResponse,
     SearchRequest,
     SearchResponse,
 )
@@ -40,6 +42,7 @@ from app.domains.auth.models import User
 from app.domains.chat_history import service as history_service
 from app.domains.ingest import drain_one
 from app.domains.memory.service import Memory
+import httpx
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -72,6 +75,80 @@ def _memory_context_block(memories: list[dict], relations: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+@router.get("/models", response_model=None)
+async def list_models(
+    memory: Annotated[Memory, Depends(get_memory)],
+) -> ModelsListResponse:
+    """Return available cloud and local Ollama models with live availability status."""
+    active_model = memory.llm.model
+    active_provider = "local" if "11434" in memory.config.provider.base_url else "cloud"
+
+    models: list[ModelOption] = [
+        ModelOption(
+            id="open-mistral-nemo",
+            name="Mistral NeMo (Fast Cloud)",
+            provider="cloud",
+            description="12B parameter model with sub-second inference & 128k context (Online)",
+            is_local=False,
+            is_available=True,
+        ),
+        ModelOption(
+            id="mistral-large-latest",
+            name="Mistral Large (Reasoning)",
+            provider="cloud",
+            description="Top-tier reasoning and deep conversational logic (Online)",
+            is_local=False,
+            is_available=True,
+        ),
+    ]
+
+    ollama_running = False
+    try:
+        async with httpx.AsyncClient(timeout=0.8) as client:
+            res = await client.get("http://localhost:11434/api/tags")
+            if res.status_code == 200:
+                ollama_running = True
+                data = res.json()
+                local_models = data.get("models", [])
+                for item in local_models:
+                    m_name = item.get("name", "")
+                    if m_name:
+                        models.append(
+                            ModelOption(
+                                id=m_name,
+                                name=f"{m_name} (Local Ollama)",
+                                provider="local",
+                                description="100% Offline private model running on your laptop",
+                                is_local=True,
+                                is_available=True,
+                            )
+                        )
+    except Exception:
+        ollama_running = False
+
+    if not ollama_running:
+        # Include fallback local option
+        models.append(
+            ModelOption(
+                id="qwen2.5-coder:7b",
+                name="Qwen 2.5 Coder (Ollama Offline)",
+                provider="local",
+                description="Local model (Start 'ollama serve' to activate offline)",
+                is_local=True,
+                is_available=False,
+            )
+        )
+
+    return to_jsonable(
+        ModelsListResponse(
+            active_model=active_model,
+            active_provider=active_provider,
+            models=models,
+            ollama_running=ollama_running,
+        )
+    )
+
+
 @router.post("", response_model=None)
 async def chat(
     req: Annotated[ChatRequest, Depends(msgspec_body(ChatRequest))],
@@ -89,10 +166,6 @@ async def chat(
     )
 
     # 2) Recall - pull the top-k memories + graph hits for context.
-    #    Note: the just-sent message isn't in the memory store yet
-    #    (ingest is deferred to the background drainer). The reply
-    #    doesn't depend on its own message being recalled, so this
-    #    is fine — the user said it, they don't need to see it back.
     recall = await memory.search(
         req.message,
         user_id=user.id,
@@ -100,37 +173,59 @@ async def chat(
         threshold=0.3,
     )
 
-    # 3) Ask the LLM.
+    # 3) Ask the LLM (with dynamic model and provider routing)
     context_block = _memory_context_block(
         recall.get("results", []), recall.get("relations", [])
     )
     system_prompt = _CHAT_SYSTEM_PROMPT.format(memory_context=context_block)
-    raw = await memory.llm.generate_response(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": req.message},
-        ]
-    )
-    response_text = raw if isinstance(raw, str) else (raw.get("content") or "")
+    
+    try:
+        raw = await memory.llm.generate_response(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": req.message},
+            ],
+            model=req.model,
+            provider=req.provider,
+        )
+        response_text = raw if isinstance(raw, str) else (raw.get("content") or "")
+    except Exception as llm_err:
+        err_str = str(llm_err).lower()
+        if "connection" in err_str or "unreachable" in err_str or "timeout" in err_str or "refused" in err_str:
+            if req.provider in ("local", "ollama") or (req.model and "qwen" in req.model.lower()):
+                response_text = (
+                    "⚠️ **Could not connect to Local Ollama.**\n\n"
+                    "Please ensure Ollama is running on your machine by starting the **Ollama** app "
+                    "or running `ollama serve` in a terminal."
+                )
+            else:
+                response_text = (
+                    "⚠️ **Could not reach the Cloud AI Provider.**\n\n"
+                    "It looks like you might be offline or have network issues. "
+                    "You can switch to **Local Ollama** from the model selector dropdown in the top header to continue chatting offline!"
+                )
+        else:
+            response_text = f"Error from model engine: {llm_err}"
 
-    # 4) Record the raw transcript turn. Independent of the memory store:
-    #    the typed-memory extraction (now background) is what gets
-    #    recalled later; the chat history is what the user sees in
-    #    the sidebar.
+    # 4) Record the raw transcript turn. Independent of the memory store.
     user_message = await history_service.record_turn(
         conversation, "user", req.message
     )
     await history_service.record_turn(conversation, "assistant", response_text)
 
     # 5) Fire-and-forget: extract typed memories in the background.
-    #    The user already has their reply. If the drainer fails it
-    #    bumps `ingest_attempts` and the periodic drain_loop will
-    #    pick it up later — no message is silently lost.
-    asyncio.create_task(drain_one(memory, user_message.id))
+    asyncio.create_task(
+        drain_one(
+            memory,
+            user_message.id,
+            model=req.model,
+            provider=req.provider,
+        )
+    )
 
     return to_jsonable(ChatResponse(
         response=response_text,
-        stored=[],  # ingest is async; populated on the next recall
+        stored=[],
         relations=recall.get("relations", []),
         conversation_id=conversation.id,
     ))

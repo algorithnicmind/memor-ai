@@ -27,6 +27,7 @@
 * **🧠 Persistent Memory**: Zero context loss across sessions.
 * **🕸️ Dual-Retrieval Architecture**: Combines **Vector Similarity (1024-dim embeddings)** with **Knowledge Graph Triples `(Entity → Relation → Entity)`** for zero-hallucination factual recall.
 * **⚡ Asynchronous Ingestion**: User messages receive instant sub-second replies, while typed memory extraction and graph updates run in a non-blocking background queue.
+* **💻 Hybrid Online / 100% Offline AI**: Seamless 1-click toggling between Cloud API (Mistral) and Local Edge AI (Qwen 2.5 Coder via Ollama) with **0 internet required**.
 * **🛡️ Privacy & Control**: Users can search, filter (Decisions, Preferences, Plans), edit, or purge their memory graph at any time.
 
 ---

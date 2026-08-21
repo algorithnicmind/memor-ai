@@ -37,7 +37,12 @@ _BATCH_SIZE = 10
 _IDLE_INTERVAL_SECONDS = 5.0
 
 
-async def drain_one(memory: Memory, message_id: str) -> bool:
+async def drain_one(
+    memory: Memory,
+    message_id: str,
+    model: str | None = None,
+    provider: str | None = None,
+) -> bool:
     """Ingest a single chat message into the memory store.
 
     Idempotent: re-running on a row that's already ingested is a
@@ -66,7 +71,12 @@ async def drain_one(memory: Memory, message_id: str) -> bool:
 
     user = msg.conversation.user
     try:
-        await memory.add(msg.content, user_id=user.id)
+        await memory.add(
+            msg.content,
+            user_id=user.id,
+            model=model,
+            provider=provider,
+        )
     except Exception:
         msg.ingest_attempts = (msg.ingest_attempts or 0) + 1
         await msg.save(update_fields=["ingest_attempts"])

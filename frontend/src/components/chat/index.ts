@@ -3,3 +3,4 @@ export { MessageBubble } from "./message-bubble";
 export { ChatInput } from "./chat-input";
 export { TypingIndicator } from "./typing-indicator";
 export { MemorySidebar } from "./memory-sidebar";
+export { ModelSelector } from "./model-selector";

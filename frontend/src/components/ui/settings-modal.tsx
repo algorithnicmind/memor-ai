@@ -47,6 +47,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const updateAiMode = (mode: string) => {
     setAiMode(mode);
     localStorage.setItem("memorai_pref_aimode", mode);
+    const provider = mode === "Local" ? "local" : "cloud";
+    localStorage.setItem("memorai_selected_provider", provider);
+    if (provider === "local") {
+      localStorage.setItem("memorai_selected_model", "qwen2.5-coder:7b");
+    } else {
+      localStorage.setItem("memorai_selected_model", "open-mistral-nemo");
+    }
     showSavedIndicator();
   };
 
