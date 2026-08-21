@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { MessageBubble } from "./message-bubble";
-import { PromptInputBox } from "@/components/ui/ai-prompt-box";
+import { ChatInput } from "./chat-input";
 import { TypingIndicator } from "./typing-indicator";
 import { MemorySidebar } from "./memory-sidebar";
 import { LeftSidebar } from "./left-sidebar";
@@ -208,18 +208,12 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
         </div>
 
         {/* Chat Input Container */}
-        <div className="shrink-0 w-full flex justify-center px-6 pb-12 pt-2 border-t border-white/[0.04] bg-black/20 backdrop-blur-md">
-          <div className="w-full max-w-4xl">
-            <PromptInputBox
-              onSend={(message, files) => {
-                if (message || (files && files.length > 0)) {
-                  handleSendMessage(message);
-                }
-              }}
-              isLoading={isLoading}
-              placeholder="Message Memorai..."
-            />
-          </div>
+        <div className="shrink-0 p-4 pt-2 border-t border-white/[0.06] bg-black/40 backdrop-blur-xl">
+          <ChatInput
+            onSend={handleSendMessage}
+            isLoading={isLoading}
+            placeholder="Message Memorai (ask anything, memories are automatically saved)..."
+          />
         </div>
       </main>
 
