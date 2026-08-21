@@ -4,14 +4,15 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ MEMORAI                                   [Home] [About] [Contact]      │
+│ MEMORAI                         [ Home ]  [ About ]  [ Contact ]        │
+│                                           [ Register ] [ Sign In ]      │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│   (Animated 3D Brain / Particles)                                       │
+│   (Animated 3D Brain / Particles Background)                            │
 │                                                                         │
 │   AN AI THAT ACTUALLY REMEMBERS YOU.                                    │
 │                                                                         │
-│   [ Register / Sign Up ]      [ Login ]                                 │
+│   [ Get Started ]                                                       │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -98,7 +99,9 @@ This is the first screen shown to a new visitor.
 
 Wireframe
 ┌──────────────────────────────────────────────────────────────┐
-│                                                              │
+│  MEMORAI                        [ Home ] [ About ] [ Contact]│
+│                                 [ Register ] [ Sign In ]     │
+├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │                         🧠                                   │
 │                       MEMORAI                                │
@@ -107,10 +110,7 @@ Wireframe
 │                                                              │
 │       Personalized conversations powered by memory.          │
 │                                                              │
-│                 [ Sign In ]   [ Sign Up ]                    │
-│                                                              │
-│                                                              │
-│       Your conversations. Your memory. Your AI.              │
+│                 [ Get Started ]                              │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
 Elements
@@ -139,24 +139,27 @@ For a completely new user.
 │                                               │
 │              Create your account              │
 │                                               │
-│  Name                                         │
-│  [____________________________]               │
+│ ┌───────────────────────────────────────────┐ │
+│ │ Name                                      │ │
+│ │ _________________________________________ │ │
+│ └───────────────────────────────────────────┘ │
 │                                               │
-│  Email                                        │
-│  [____________________________]               │
+│ ┌───────────────────────────────────────────┐ │
+│ │ Email                                     │ │
+│ │ _________________________________________ │ │
+│ └───────────────────────────────────────────┘ │
 │                                               │
-│  Password                                     │
-│  [____________________________]               │
-│                                               │
-│  Confirm Password                             │
-│  [____________________________]               │
+│ ┌───────────────────────────────────────────┐ │
+│ │ Password                                  │ │
+│ │ _________________________________________ │ │
+│ └───────────────────────────────────────────┘ │
 │                                               │
 │             [ Create Account ]                │
 │                                               │
-│        Already have an account?               │
-│                 Sign In                       │
+│        Already have an account? Sign In       │
 │                                               │
 └───────────────────────────────────────────────┘
+*Note: Form boxes must NOT overlap. Strict vertical spacing. Enterprise-level clean UI.*
 Backend connection
 
 This corresponds to your existing:
@@ -174,11 +177,15 @@ User
 │                                               │
 │                 Welcome back                  │
 │                                               │
-│  Email                                        │
-│  [____________________________]               │
+│ ┌───────────────────────────────────────────┐ │
+│ │ Email                                     │ │
+│ │ _________________________________________ │ │
+│ └───────────────────────────────────────────┘ │
 │                                               │
-│  Password                                     │
-│  [____________________________]               │
+│ ┌───────────────────────────────────────────┐ │
+│ │ Password                                  │ │
+│ │ _________________________________________ │ │
+│ └───────────────────────────────────────────┘ │
 │                                               │
 │             [ Sign In ]                       │
 │                                               │
@@ -187,6 +194,7 @@ User
 │       Don't have an account? Sign Up          │
 │                                               │
 └───────────────────────────────────────────────┘
+*Note: Form boxes must NOT overlap. Strict vertical spacing. Enterprise-level clean UI.*
 5. Main Chat Dashboard
 
 This is the most important wireframe.
@@ -194,7 +202,7 @@ This is the most important wireframe.
 The structure should feel familiar to users of modern AI chat applications.
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ MEMORAI                                             Search 🔍    👤 Profile │
+│ ☰ MEMORAI                                           Search 🔍    👤 Profile │
 ├───────────────┬───────────────────────────────────────────────┬─────────────┤
 │               │                                               │             │
 │  + New Chat   │              Conversation Area               │   🧠 Memory  │
@@ -205,12 +213,12 @@ The structure should feel familiar to users of modern AI chat applications.
 │  📁 My Project│                                               │   Goals     │
 │               │          Memorai response                     │   • AI/ML   │
 │  Chats        │          ───────────────                      │             │
-│               │                                               │   Skills    │
+│               │          [🧠 3 memories used]                 │   Skills    │
 │  Today        │                                               │   • Python  │
 │  • Chat 1     │                                               │             │
 │  • Chat 2     │                                               │             │
 │               │                                               │             │
-│  Yesterday     │                                               │             │
+│  Yesterday    │                                               │             │
 │  • Chat 3     │                                               │             │
 │               │                                               │             │
 │               │                                               │             │
@@ -218,13 +226,15 @@ The structure should feel familiar to users of modern AI chat applications.
 │  • Important  │                                               │             │
 │               │                                               │             │
 │               │                                               │             │
-│               │ [ Ask Memorai anything...             ]  ➤    │             │
+│               │ ┌─────────────────────────────────────────┐   │             │
+│               │ │ ➕ 🎤     Message Memorai...        ➤  │   │             │
+│               │ └─────────────────────────────────────────┘   │             │
 │               │                                               │             │
 ├───────────────┴───────────────────────────────────────────────┴─────────────┤
 │  ⚙ Settings    👤 Account                                                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-This keeps the chat experience simple, while the right-side Memory panel exposes what makes Memorai different.
+*Note: The Chat Dashboard must be highly stable, clean, and enterprise-level. The left sidebar must be collapsible. The message input box must be a single sleek container (ChatGPT style) without messy overlapping icons.*
 
 6. Left Sidebar
 
@@ -437,7 +447,7 @@ The center area remains intentionally simple.
 │                                                     │
 │                                                     │
 │        ┌─────────────────────────────────┐          │
-│        │ Ask anything...                 │          │
+│        │+ Ask anything...                 │          │
 │        │                                 │          │
 │        │                          🎤 ➤   │          │
 │        └─────────────────────────────────┘          │

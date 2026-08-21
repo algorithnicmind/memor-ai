@@ -130,18 +130,6 @@ body {
     hsl(180, 70%, 45%) 50%,
     hsl(200, 80%, 50%) 100%
   );
-
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
 }
 
 /* Custom scrollbar */
@@ -161,11 +149,6 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
-}
-
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
 }
 
 /* Selection color */
@@ -208,14 +191,6 @@ html {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-}
-
-
-  background: linear-gradient(135deg,
-    hsl(160, 84%, 39%) 0%,
-    hsl(180, 70%, 45%) 50%,
-    hsl(200, 80%, 50%) 100%
-  );
 }
 
 /* ─── Memory Glow (signature Memorai effect) ──────────────────── */
@@ -610,4 +585,16 @@ html {
 .animate-gradient {
   background-size: 200% 200%;
   animation: gradient-shift 3s ease infinite;
+}
+
+/* ─── Autofill Override ───────────────────────────────────────── */
+/* Prevent Chrome from overriding dark input backgrounds on autofill */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.4) inset !important;
+  -webkit-text-fill-color: #e4e4e7 !important;
+  caret-color: #e4e4e7;
+  transition: background-color 9999s ease-in-out 0s;
 }

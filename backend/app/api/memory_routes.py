@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
+from starlette import status
 
 from app.api.deps import current_user, get_memory
 from app.api.msgspec_response import to_jsonable

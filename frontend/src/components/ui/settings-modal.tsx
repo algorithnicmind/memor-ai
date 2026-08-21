@@ -42,7 +42,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </h3>
               <div className="flex gap-3">
                 {['Light', 'Dark', 'System'].map(mode => (
-                  <button key={mode} className={`flex-1 py-2 px-3 rounded-xl border ${mode === 'Dark' ? 'border-purple-500/50 bg-purple-500/10 text-white' : 'border-zinc-800 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'} text-sm font-medium transition-all`}>
+                  <button key={mode} className={`flex-1 py-2.5 px-4 rounded-xl border ${mode === 'Dark' ? 'border-purple-500/50 bg-purple-500/10 text-white' : 'border-zinc-800 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'} text-sm font-medium transition-all`}>
                     {mode}
                   </button>
                 ))}
@@ -57,7 +57,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </h3>
               <div className="flex gap-3">
                 {['Local', 'Cloud'].map(mode => (
-                  <button key={mode} className={`flex-1 py-2 px-3 rounded-xl border ${mode === 'Local' ? 'border-purple-500/50 bg-purple-500/10 text-white' : 'border-zinc-800 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'} text-sm font-medium transition-all`}>
+                  <button key={mode} className={`flex-1 py-2.5 px-4 rounded-xl border ${mode === 'Local' ? 'border-purple-500/50 bg-purple-500/10 text-white' : 'border-zinc-800 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'} text-sm font-medium transition-all`}>
                     {mode}
                   </button>
                 ))}

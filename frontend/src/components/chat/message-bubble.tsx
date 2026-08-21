@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
-import React from "react";
-import { motion } from "motion/react";
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import { Message, MemoryUsed, RelationUsed } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Brain, User, Sparkles, Link2 } from "lucide-react";
+import { Brain, User, Sparkles, Link2, Info, ChevronDown, ChevronUp } from "lucide-react";
 
 interface MessageBubbleProps {
   message: Message;
@@ -14,37 +14,41 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const [showMemoryDetails, setShowMemoryDetails] = useState(false);
+
+  const hasMemories = message.memories_used && message.memories_used.length > 0;
+  const hasRelations = message.relations_used && message.relations_used.length > 0;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      initial={{ opacity: 0, y: 16, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
       className={cn(
-        "flex gap-3 w-full",
+        "flex gap-3 w-full group",
         isUser ? "flex-row-reverse" : "flex-row"
       )}
     >
       {/* Avatar */}
       <div
         className={cn(
-          "shrink-0 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg",
+          "shrink-0 w-9 h-9 rounded-xl flex items-center justify-center shadow-md",
           isUser
-            ? "bg-linear-to-br from-purple-600 to-indigo-600 shadow-purple-500/20"
-            : "bg-linear-to-br from-emerald-600 to-teal-600 shadow-emerald-500/20"
+            ? "bg-gradient-to-br from-purple-600 to-indigo-600 shadow-purple-900/30"
+            : "bg-gradient-to-br from-emerald-600 to-teal-600 shadow-emerald-900/30 ring-1 ring-white/10"
         )}
       >
         {isUser ? (
-          <User className="w-5 h-5 text-white" />
+          <User className="w-4 h-4 text-white" />
         ) : (
-          <Brain className="w-5 h-5 text-white" />
+          <Brain className="w-4 h-4 text-white" />
         )}
       </div>
 
       {/* Message content */}
       <div
         className={cn(
-          "flex flex-col max-w-[80%]",
+          "flex flex-col max-w-[82%] sm:max-w-[78%]",
           isUser ? "items-end" : "items-start"
         )}
       >
@@ -52,39 +56,95 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           className={cn(
             "rounded-2xl px-4 py-3 shadow-lg",
             isUser
-              ? "bg-linear-to-r from-purple-600/90 to-indigo-600/90 text-white"
-              : "bg-zinc-800/80 border border-zinc-700/50 text-zinc-100"
+              ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-tr-xs"
+              : "bg-zinc-900/90 border border-white/[0.08] text-zinc-100 rounded-tl-xs backdrop-blur-md"
           )}
         >
-          <div className="prose prose-invert prose-sm max-w-none">
+          <div className="prose prose-invert prose-sm max-w-none text-[13.5px] leading-relaxed">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {message.content}
             </ReactMarkdown>
           </div>
         </div>
 
-        {/* Memory badges (for assistant messages) */}
-        {!isUser && message.memories_used && message.memories_used.length > 0 && (
-          <MemoryBadges memories={message.memories_used} />
-        )}
+        {/* Memory context tags (Wireframe Section 15) */}
+        {!isUser && (hasMemories || hasRelations) && (
+          <div className="mt-2 space-y-1.5 w-full">
+            <button
+              onClick={() => setShowMemoryDetails(!showMemoryDetails)}
+              className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/25 text-purple-300 hover:bg-purple-500/20 transition-all text-xs font-medium"
+            >
+              <Brain className="w-3.5 h-3.5 text-purple-400" />
+              <span>
+                {message.memories_used?.length || 0} {message.memories_used?.length === 1 ? "memory" : "memories"} used
+              </span>
+              {hasRelations && (
+                <>
+                  <span className="text-purple-500/50">•</span>
+                  <span className="text-cyan-300">
+                    {message.relations_used?.length} {message.relations_used?.length === 1 ? "relationship" : "relationships"}
+                  </span>
+                </>
+              )}
+              {showMemoryDetails ? (
+                <ChevronUp className="w-3 h-3 text-purple-400 ml-0.5" />
+              ) : (
+                <ChevronDown className="w-3 h-3 text-purple-400 ml-0.5" />
+              )}
+            </button>
 
-        {/* Relation badges */}
-        {!isUser && message.relations_used && message.relations_used.length > 0 && (
-          <RelationBadges relations={message.relations_used} />
+            {/* Expandable Memory Detail Popover */}
+            <AnimatePresence>
+              {showMemoryDetails && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="p-3 rounded-xl bg-zinc-900/95 border border-purple-500/30 shadow-xl space-y-2 text-xs">
+                    <div className="font-semibold text-zinc-300 flex items-center gap-1.5 pb-1 border-b border-white/[0.06]">
+                      <Info className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Retrieved Memory Context</span>
+                    </div>
+
+                    {message.memories_used?.map((mem, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-zinc-300 bg-white/[0.03] p-2 rounded-lg">
+                        <Brain className="w-3.5 h-3.5 text-purple-400 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="leading-snug">{mem.memory}</p>
+                          <span className="text-[10px] text-purple-400/80 font-mono">
+                            Relevance: {(mem.score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+
+                    {message.relations_used?.map((rel, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-cyan-300 bg-white/[0.03] p-2 rounded-lg font-mono text-[11px]">
+                        <Link2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span>{rel.source} → <span className="text-zinc-400">{rel.relation}</span> → {rel.target}</span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
 
         {/* New memories created badge */}
         {!isUser && message.memories_created && message.memories_created.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30"
+            transition={{ delay: 0.2 }}
+            className="flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-medium text-emerald-300"
           >
             <Sparkles className="w-3 h-3 text-emerald-400" />
-            <span className="text-xs text-emerald-400">
-              +{message.memories_created.length} new{" "}
-              {message.memories_created.length === 1 ? "memory" : "memories"} saved
+            <span>
+              +{message.memories_created.length} new {message.memories_created.length === 1 ? "fact" : "facts"} saved to your graph
             </span>
           </motion.div>
         )}
@@ -94,61 +154,6 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           {formatTime(message.timestamp)}
         </span>
       </div>
-    </motion.div>
-  );
-}
-
-function MemoryBadges({ memories }: { memories: MemoryUsed[] }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2 }}
-      className="flex flex-wrap gap-1.5 mt-2"
-    >
-      {memories.slice(0, 3).map((memory, idx) => (
-        <div
-          key={idx}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30"
-          title={memory.memory}
-        >
-          <Brain className="w-3 h-3 text-purple-400" />
-          <span className="text-xs text-purple-300 truncate max-w-[150px]">
-            {memory.memory}
-          </span>
-          <span className="text-[10px] text-purple-400/70">
-            {(memory.score * 100).toFixed(0)}%
-          </span>
-        </div>
-      ))}
-      {memories.length > 3 && (
-        <span className="text-xs text-zinc-500 self-center">
-          +{memories.length - 3} more
-        </span>
-      )}
-    </motion.div>
-  );
-}
-
-function RelationBadges({ relations }: { relations: RelationUsed[] }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.25 }}
-      className="flex flex-wrap gap-1.5 mt-1"
-    >
-      {relations.slice(0, 2).map((rel, idx) => (
-        <div
-          key={idx}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30"
-        >
-          <Link2 className="w-3 h-3 text-cyan-400" />
-          <span className="text-xs text-cyan-300">
-            {rel.source} → {rel.relation} → {rel.target}
-          </span>
-        </div>
-      ))}
     </motion.div>
   );
 }

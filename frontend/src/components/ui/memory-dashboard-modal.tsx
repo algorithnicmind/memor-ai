@@ -50,7 +50,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-purple-500/30 transition-colors group">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-semibold text-zinc-200 flex items-center gap-2"><User className="w-4 h-4 text-purple-400"/> Profile</h4>
-                  <button className="text-xs text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100">Edit</button>
+                  <button className="px-2 py-1 text-xs text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100">Edit</button>
                 </div>
                 <ul className="text-sm text-zinc-400 space-y-1">
                   <li>• Computer Science Student</li>
@@ -61,7 +61,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-blue-500/30 transition-colors group">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-semibold text-zinc-200 flex items-center gap-2"><Target className="w-4 h-4 text-blue-400"/> Goals</h4>
-                  <button className="text-xs text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100">Edit</button>
+                  <button className="px-2 py-1 text-xs text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100">Edit</button>
                 </div>
                 <ul className="text-sm text-zinc-400 space-y-1">
                   <li>• Learn AI/ML</li>
@@ -73,7 +73,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-green-500/30 transition-colors group">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-semibold text-zinc-200 flex items-center gap-2"><Code className="w-4 h-4 text-green-400"/> Skills</h4>
-                  <button className="text-xs text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100">Edit</button>
+                  <button className="px-2 py-1 text-xs text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100">Edit</button>
                 </div>
                 <ul className="text-sm text-zinc-400 space-y-1">
                   <li>• Python</li>
@@ -86,7 +86,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-pink-500/30 transition-colors group">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-semibold text-zinc-200 flex items-center gap-2"><Heart className="w-4 h-4 text-pink-400"/> Preferences</h4>
-                  <button className="text-xs text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100">Edit</button>
+                  <button className="px-2 py-1 text-xs text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100">Edit</button>
                 </div>
                 <ul className="text-sm text-zinc-400 space-y-1">
                   <li>• Local AI models</li>
@@ -98,7 +98,7 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 hover:border-amber-500/30 transition-colors group">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-semibold text-zinc-200 flex items-center gap-2"><CheckSquare className="w-4 h-4 text-amber-400"/> Decisions</h4>
-                  <button className="text-xs text-zinc-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100">Edit</button>
+                  <button className="px-2 py-1 text-xs text-zinc-500 hover:text-white hover:bg-white/10 rounded-md transition-colors opacity-0 group-hover:opacity-100">Edit</button>
                 </div>
                 <ul className="text-sm text-zinc-400 space-y-1">
                   <li>• Using PyTorch for new project</li>
@@ -127,11 +127,11 @@ export function MemoryDashboardModal({ isOpen, onClose, userId }: MemoryDashboar
             {/* Danger Zone */}
             <div className="border border-red-500/20 bg-red-500/5 rounded-2xl p-6">
               <h4 className="font-semibold text-red-400 flex items-center gap-2 mb-4"><AlertTriangle className="w-5 h-5"/> Danger Zone</h4>
-              <div className="flex flex-wrap gap-4">
-                <button className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors">
+              <div className="flex flex-wrap gap-3">
+                <button className="px-5 py-2.5 bg-zinc-900 border border-zinc-700 rounded-xl text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600 transition-colors">
                   Forget specific category...
                 </button>
-                <button className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/20 transition-colors">
+                <button className="px-5 py-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/20 transition-colors">
                   Wipe All Memory
                 </button>
               </div>
