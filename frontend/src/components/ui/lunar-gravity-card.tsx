@@ -2,98 +2,18 @@
 
 import React, { useRef, useMemo, Suspense, useState, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 
 const RADIUS = 2.0;
 
-// High-detail procedural lunar surface texture generator (Zero network dependency, 100% offline & instant)
-function createProceduralMoonTexture(): THREE.Texture {
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    return new THREE.Texture();
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return new THREE.CanvasTexture(canvas);
 
-  // Base lunar regolith gray
-  ctx.fillStyle = "#8d9095";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Maria (dark volcanic plains like Oceanus Procellarum, Mare Tranquillitatis)
-  const mariaPlains = [
-    { x: 320, y: 200, r: 170, color: "rgba(42, 45, 50, 0.70)" },
-    { x: 440, y: 160, r: 130, color: "rgba(38, 40, 46, 0.65)" },
-    { x: 230, y: 290, r: 110, color: "rgba(48, 50, 56, 0.60)" },
-    { x: 670, y: 240, r: 150, color: "rgba(44, 46, 52, 0.65)" },
-    { x: 790, y: 190, r: 120, color: "rgba(40, 42, 48, 0.60)" },
-    { x: 510, y: 350, r: 95, color: "rgba(50, 53, 58, 0.55)" },
-    { x: 150, y: 180, r: 85, color: "rgba(46, 48, 54, 0.50)" },
-  ];
-
-  mariaPlains.forEach((m) => {
-    const grad = ctx.createRadialGradient(m.x, m.y, 15, m.x, m.y, m.r);
-    grad.addColorStop(0, m.color);
-    grad.addColorStop(0.7, m.color);
-    grad.addColorStop(1, "rgba(141, 144, 149, 0)");
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
-  // Impact Craters & Ejecta Rays
-  for (let i = 0; i < 400; i++) {
-    const cx = Math.random() * canvas.width;
-    const cy = Math.random() * canvas.height;
-    const cr = Math.random() * 18 + 2;
-
-    // Bright crater rim
-    ctx.strokeStyle = `rgba(235, 240, 245, ${Math.random() * 0.45 + 0.25})`;
-    ctx.lineWidth = Math.max(1, cr * 0.22);
-    ctx.beginPath();
-    ctx.arc(cx, cy, cr, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Dark crater shadow floor
-    ctx.fillStyle = `rgba(25, 27, 30, ${Math.random() * 0.55 + 0.25})`;
-    ctx.beginPath();
-    ctx.arc(cx - cr * 0.12, cy - cr * 0.12, cr * 0.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Central peak for large impact craters (e.g. Tycho, Copernicus)
-    if (cr > 8) {
-      ctx.fillStyle = "rgba(240, 245, 250, 0.7)";
-      ctx.beginPath();
-      ctx.arc(cx, cy, cr * 0.18, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  // Fine surface micro-roughness
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imgData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const noise = (Math.random() - 0.5) * 26;
-    data[i] = Math.min(255, Math.max(0, data[i] + noise));
-    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
-    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
-  }
-  ctx.putImageData(imgData, 0, 0);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  return texture;
-}
 
 const RealisticMoon = ({ onClick }: { onClick?: () => void }) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
-  const moonTexture = useMemo(() => createProceduralMoonTexture(), []);
+  const moonTexture = useTexture('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg');
 
   useFrame((_, delta) => {
     if (meshRef.current) meshRef.current.rotation.y += delta * 0.05;
@@ -364,7 +284,7 @@ const AsteroidBelt = ({
   massiveAsteroidsRef: React.MutableRefObject<Float32Array>;
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const moonTexture = useMemo(() => createProceduralMoonTexture(), []);
+  const moonTexture = useTexture('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg');
 
   const count = 75; 
   const dummy = useMemo(() => new THREE.Object3D(), []);
