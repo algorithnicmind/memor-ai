@@ -32,9 +32,54 @@ import {
   HelpCircle,
   Clock,
   MapPin,
-  Bot
+  Bot,
+  MessageCircle,
+  Camera,
+  Video,
+  Briefcase
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { TeamSection } from "@/components/ui/team-section-1";
+
+const teamMembers = [
+  {
+    name: "EMMA",
+    designation: "Product Designer",
+    imageSrc:
+      "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=1961&auto=format&fit=crop", 
+    socialLinks: [
+      { icon: MessageCircle, href: "#" },
+      { icon: Briefcase, href: "#" },
+    ],
+  },
+  {
+    name: "HENRY",
+    designation: "Lead Developer",
+    imageSrc:
+      "https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?q=80&w=1965&auto=format&fit=crop", 
+    socialLinks: [
+      { icon: GitBranch, href: "#" },
+      { icon: MessageCircle, href: "#" },
+    ],
+  },
+  {
+    name: "JOHN",
+    designation: "Marketing Specialist",
+    imageSrc:
+      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=1974&auto=format&fit=crop", 
+    socialLinks: [
+      { icon: Globe, href: "#" },
+      { icon: Camera, href: "#" },
+    ],
+  },
+];
+
+const mainSocialLinks = [
+  { icon: MessageCircle, href: "#" },
+  { icon: Globe, href: "#" },
+  { icon: Camera, href: "#" },
+  { icon: Video, href: "#" },
+];
 
 function getInitialUserId(): string | null {
   if (typeof window === "undefined") return null;
@@ -877,6 +922,14 @@ export default function Home() {
           </div>
         </section>
 
+        <TeamSection
+          title="CREATIVE TEAM"
+          description="Meet the brilliant minds behind Memorai. We are a team of passionate engineers and designers dedicated to building the future of personalized AI."
+          members={teamMembers}
+          registerLink="#"
+          logo={<span className="text-purple-500 font-bold tracking-tighter">MEMORAI TEAM</span>}
+          socialLinksMain={mainSocialLinks}
+        />
       </main>
 
       {/* â”€â”€ Footer â”€â”€ */}
