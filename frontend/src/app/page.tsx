@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { ChatInterface } from "@/components/chat/chat-interface";
+import { Component as LunarGravityCard } from "@/components/ui/lunar-gravity-card";
 import {
   ArrowRight,
   Mail,
@@ -553,133 +554,8 @@ export default function Home() {
           id="hero"
           className="min-h-screen flex flex-col justify-center items-center pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto"
         >
-          <div className="text-center max-w-4xl mx-auto flex flex-col items-center">
-            {/* Pill Tag */}
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 backdrop-blur-xl shadow-lg shadow-purple-900/20 mb-8"
-            >
-              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-              <span className="text-[11px] font-semibold tracking-wider uppercase text-purple-300 font-mono">
-                Persistent Knowledge Graph Architecture
-              </span>
-            </motion.div>
-
-            {/* Main Headline */}
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-5xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight text-white leading-[1.05] mb-6"
-            >
-              Your AI that{" "}
-              <span className="block bg-gradient-to-r from-purple-400 via-indigo-300 to-pink-400 bg-clip-text text-transparent">
-                actually remembers.
-              </span>
-            </motion.h1>
-
-            {/* Subtitle */}
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-base sm:text-xl text-zinc-400 max-w-2xl mx-auto leading-relaxed mb-10"
-            >
-              Memorai automatically maps your conversations into a living Knowledge Graph.
-              Experience seamless, deeply personalized intelligence without having to repeat yourself.
-            </motion.p>
-
-            {/* Action Buttons */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
-            >
-              <button
-                onClick={() => {
-                  setAuthError("");
-                  setAuthModal("signup");
-                }}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white font-semibold text-sm rounded-2xl border border-purple-400/30 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(168,85,247,0.5)] active:scale-[0.98] transition-all duration-200 shadow-xl shadow-purple-600/30 cursor-pointer"
-              >
-                <span>Launch Interactive Demo</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-              
-              <button
-                onClick={() => scrollTo(featuresRef)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-4 bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 hover:text-white font-semibold text-sm rounded-2xl border border-white/[0.1] transition-all duration-200 cursor-pointer"
-              >
-                <span>Explore Features</span>
-                <ChevronRight className="w-4 h-4 text-zinc-500" />
-              </button>
-            </motion.div>
-
-            {/* Live Interactive Product Preview Mockup Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.45 }}
-              className="w-full max-w-3xl mt-14 rounded-3xl border border-white/[0.12] bg-[#0c0c14]/90 backdrop-blur-2xl shadow-2xl shadow-black/80 overflow-hidden text-left"
-            >
-              {/* Window Titlebar */}
-              <div className="h-11 px-5 bg-white/[0.03] border-b border-white/[0.06] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-amber-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                  <span className="text-xs font-mono text-zinc-500 ml-2">memorai-session-v1.live</span>
-                </div>
-                <div className="flex items-center gap-2 px-2.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[10px] font-mono text-purple-300">
-                  <Brain className="w-3 h-3 text-purple-400" />
-                  <span>3 Active Graph Nodes</span>
-                </div>
-              </div>
-
-              {/* Chat Simulation Area */}
-              <div className="p-6 space-y-4">
-                {/* User Message */}
-                <div className="flex items-start justify-end gap-3">
-                  <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl rounded-tr-xs px-4 py-3 text-sm shadow-md max-w-md">
-                    Could you suggest next steps for my machine learning project roadmap?
-                  </div>
-                  <div className="w-8 h-8 rounded-xl bg-purple-500/30 border border-purple-400/40 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                    ME
-                  </div>
-                </div>
-
-                {/* Assistant Response with Graph Context */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                    <Bot className="w-4 h-4" />
-                  </div>
-                  <div className="space-y-2 max-w-lg">
-                    <div className="bg-white/[0.04] border border-white/[0.08] text-zinc-200 rounded-2xl rounded-tl-xs p-4 text-sm leading-relaxed">
-                      Based on your background as a <span className="text-purple-300 font-semibold">CS Student</span> aiming to become an <span className="text-purple-300 font-semibold">ML Engineer</span> and your preference for <span className="text-purple-300 font-semibold">PyTorch with FastAPI</span>:
-                      <ul className="mt-2 space-y-1 text-xs text-zinc-400">
-                        <li>• <strong className="text-zinc-200">Stage 1:</strong> Implement your hybrid recommendation pipeline with vector embeddings.</li>
-                        <li>• <strong className="text-zinc-200">Stage 2:</strong> Package model inference behind your asynchronous FastAPI gateway.</li>
-                      </ul>
-                    </div>
-
-                    {/* Extracted Memory Chips */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/25 text-[11px] text-purple-300 font-mono">
-                        <Brain className="w-3 h-3 text-purple-400" />
-                        <span>Memory: Goal: Learn AI/ML</span>
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-[11px] text-emerald-300 font-mono">
-                        <GitBranch className="w-3 h-3 text-emerald-400" />
-                        <span>Relation: User → using → PyTorch</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+          <div className="w-full flex justify-center items-center">
+            <LunarGravityCard />
           </div>
         </section>
 
