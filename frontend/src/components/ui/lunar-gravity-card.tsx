@@ -2,7 +2,7 @@
 
 import React, { useRef, useMemo, Suspense, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, useTexture, Environment } from "@react-three/drei";
+import { OrbitControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,7 @@ const RADIUS = 2.0;
 const RealisticMoon = ({ onClick }: { onClick?: () => void }) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
-  const colorMap = useTexture("https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg");
+  const colorMap = useTexture("/moon.jpg");
 
   useFrame((_, delta) => {
     if (meshRef.current) meshRef.current.rotation.y += delta * 0.05;
@@ -272,8 +272,8 @@ const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' 
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
   const [colorMap, bumpMap] = useTexture([
-    'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg',
-    'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'
+    '/moon.jpg',
+    '/moon.jpg'
   ]);
 
   const count = 75; 
@@ -385,7 +385,7 @@ export default function LunarGravityCard({
       <div className="relative md:absolute md:right-0 md:top-0 w-full h-[450px] md:h-full md:w-[65%] pointer-events-auto z-0 flex items-center justify-center cursor-pointer">
         <div className="absolute inset-0 w-full h-full">
           <Canvas shadows camera={{ position: [0, 4, 10], fov: 45 }} dpr={[1, 2]}>
-            <Environment preset="city" />
+
 
             <ambientLight intensity={0.02} />
             <directionalLight position={[8, 5, 5]} intensity={1.5} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
@@ -398,7 +398,7 @@ export default function LunarGravityCard({
                 <RealisticMoon onClick={() => { if(ringState === 'hidden') setRingState('animating') }} />
                 <ParticleRing ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
                 <AsteroidBelt ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
-                <Environment preset="city" />
+
               </Suspense>
             </group>
           </Canvas>
