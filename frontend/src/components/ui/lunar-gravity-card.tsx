@@ -359,14 +359,14 @@ export default function LunarGravityCard({
   className,
   title = (
     <>
-      <span className="text-zinc-50 drop-shadow-sm">Lunar</span>
+      <span className="text-zinc-50 drop-shadow-sm">Memorai</span>
       <br />
       <span className="text-transparent bg-clip-text bg-gradient-to-b from-white via-zinc-400 to-zinc-800 drop-shadow-md">
-        Gravity.
+        Memory.
       </span>
     </>
   ),
-  description = "Embed highly realistic astrophysics directly into your Next.js project. Zero configuration, fully interactive, and flawlessly smooth."
+  description = "An intelligent assistant with persistent memory. Click the moon to explore the ecosystem."
 }: LunarGravityCardProps) {
   const [ringState, setRingState] = useState<'hidden' | 'animating' | 'visible'>('hidden');
   const massiveAsteroidsRef = useRef<Float32Array>(new Float32Array(75 * 4));
