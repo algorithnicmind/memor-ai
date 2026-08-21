@@ -91,7 +91,7 @@ export const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
               {registerLink && (
                 <a
                   href={registerLink}
-                  className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-8 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-white px-8 text-sm font-bold text-black shadow-[0_0_20px_rgba(255,255,255,0.15)] transition-all hover:bg-zinc-200 hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                 >
                   REGISTER NOW
                 </a>
@@ -145,13 +145,13 @@ export const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
 
                 {/* Member Image with mask and border animation */}
                 <div
-                  className="relative z-10 h-36 w-36 overflow-hidden rounded-full border-4 border-transparent bg-background/20 transition-all duration-500 ease-out group-hover:border-primary group-hover:scale-105"
-                  style={{ transitionDelay: `${index * 100}ms` }}
+                  className="relative z-10 h-36 w-36 overflow-hidden rounded-full border-4 border-white/5 bg-background/20 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:-translate-y-4 group-hover:scale-110 group-hover:border-purple-500/50 group-hover:shadow-[0_0_40px_rgba(168,85,247,0.4)]"
+                  style={{ transitionDelay: `${index * 50}ms` }}
                 >
                   <img
                     src={member.imageSrc}
                     alt={member.name}
-                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                    className="h-full w-full object-cover grayscale-[0.8] contrast-125 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:grayscale-0 group-hover:contrast-100 group-hover:scale-110"
                   />
                 </div>
 
