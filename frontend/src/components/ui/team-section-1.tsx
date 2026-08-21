@@ -11,6 +11,7 @@ interface TeamMember {
   name: string;
   designation: string;
   imageSrc: string;
+  imagePosition?: string;
   socialLinks?: SocialLink[];
 }
 
@@ -121,37 +122,26 @@ export const TeamSection = React.forwardRef<HTMLDivElement, TeamSectionProps>(
           )}
 
           {/* Team Members Grid */}
-          <div className="relative z-10 mx-auto grid w-full max-w-5xl grid-cols-1 gap-8 md:grid-cols-3 lg:gap-12">
+          <div className="relative z-10 mx-auto grid w-full max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4 lg:gap-8">
             {members.map((member, index) => (
               <div
                 key={index}
-                className="group relative flex flex-col items-center justify-end overflow-hidden rounded-xl bg-card p-6 text-center shadow-lg transition-all duration-300 ease-in-out hover:scale-[1.02] hover:shadow-2xl"
-                style={{
-                  // Dynamic background color based on index or theme
-                  backgroundColor:
-                    index === 0
-                      ? "hsl(var(--destructive)/0.1)" // Example: using destructive as pinkish
-                      : index === 1
-                      ? "hsl(var(--muted))" // Example: using muted for grey
-                      : "hsl(var(--warning)/0.2)", // Example: using warning as yellowish
-                  color: "hsl(var(--foreground))",
-                }}
+                className="group relative flex flex-col items-center justify-end overflow-visible rounded-xl p-4 text-center transition-all duration-300 ease-in-out hover:scale-[1.02]"
               >
                 {/* Background wave animation */}
                 <div
-                  className="absolute bottom-0 left-0 right-0 h-1/2 origin-bottom scale-y-0 transform rounded-t-full bg-gradient-to-t from-primary/20 to-transparent transition-transform duration-500 ease-out group-hover:scale-y-100"
-                  style={{ transitionDelay: `${index * 50}ms` }}
+                  className="absolute bottom-0 left-0 right-0 h-[65%] origin-bottom scale-y-0 opacity-0 transform rounded-t-[4rem] rounded-b-xl bg-zinc-800/80 transition-all duration-500 ease-out group-hover:scale-y-100 group-hover:opacity-100"
                 />
 
                 {/* Member Image with mask and border animation */}
                 <div
-                  className="relative z-10 h-36 w-36 overflow-hidden rounded-full border-4 border-white/5 bg-background/20 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:-translate-y-4 group-hover:scale-110 group-hover:border-purple-500/50 group-hover:shadow-[0_0_40px_rgba(168,85,247,0.4)]"
-                  style={{ transitionDelay: `${index * 50}ms` }}
+                  className="relative z-10 h-36 w-36 overflow-hidden rounded-full border-4 border-transparent transition-all duration-500 ease-out group-hover:border-white group-hover:scale-105"
                 >
                   <img
                     src={member.imageSrc}
                     alt={member.name}
-                    className="h-full w-full object-cover grayscale-[0.8] contrast-125 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:grayscale-0 group-hover:contrast-100 group-hover:scale-110"
+                    style={{ objectPosition: member.imagePosition || 'center' }}
+                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
                   />
                 </div>
 

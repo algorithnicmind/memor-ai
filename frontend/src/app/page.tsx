@@ -42,33 +42,40 @@ import { TeamSection } from "@/components/ui/team-section-1";
 
 const teamMembers = [
   {
-    name: "EMMA",
-    designation: "Product Designer",
-    imageSrc:
-      "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=1961&auto=format&fit=crop", 
+    name: "PRAGYAN",
+    designation: "Frontend Designer, Tester",
+    imageSrc: "/team-2.jpg", 
     socialLinks: [
       { icon: MessageCircle, href: "#" },
       { icon: Briefcase, href: "#" },
     ],
   },
   {
-    name: "HENRY",
-    designation: "Lead Developer",
-    imageSrc:
-      "https://images.unsplash.com/photo-1543610892-0b1f7e6d8ac1?q=80&w=1965&auto=format&fit=crop", 
+    name: "ANKIT",
+    designation: "Backend Developer",
+    imageSrc: "/team-1.jpg", 
     socialLinks: [
       { icon: GitBranch, href: "#" },
       { icon: MessageCircle, href: "#" },
     ],
   },
   {
-    name: "JOHN",
-    designation: "Marketing Specialist",
-    imageSrc:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=1974&auto=format&fit=crop", 
+    name: "BASUDEV",
+    designation: "Frontend Designer",
+    imageSrc: "/team-3.jpg", 
+    imagePosition: "80% center",
     socialLinks: [
       { icon: Globe, href: "#" },
       { icon: Camera, href: "#" },
+    ],
+  },
+  {
+    name: "AMIT",
+    designation: "Backend Developer",
+    imageSrc: "/team-4.jpg", 
+    socialLinks: [
+      { icon: Database, href: "#" },
+      { icon: MessageCircle, href: "#" },
     ],
   },
 ];
