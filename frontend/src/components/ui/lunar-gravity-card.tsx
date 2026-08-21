@@ -1,19 +1,17 @@
 "use client";
 
-import React, { useRef, useMemo, Suspense, useState, useEffect } from "react";
+import React, { useRef, useMemo, Suspense, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, useTexture } from "@react-three/drei";
+import { OrbitControls, useTexture, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 
 const RADIUS = 2.0;
 
-
-
 const RealisticMoon = ({ onClick }: { onClick?: () => void }) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
-  const moonTexture = useTexture('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg');
+  const colorMap = useTexture("https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg");
 
   useFrame((_, delta) => {
     if (meshRef.current) meshRef.current.rotation.y += delta * 0.05;
@@ -25,16 +23,16 @@ const RealisticMoon = ({ onClick }: { onClick?: () => void }) => {
       castShadow 
       receiveShadow 
       onClick={onClick}
-      onPointerOver={() => { document.body.style.cursor = 'pointer'; }} 
-      onPointerOut={() => { document.body.style.cursor = 'auto'; }}
-    >
+      onPointerOver={() => document.body.style.cursor = 'pointer'} 
+      onPointerOut={() => document.body.style.cursor = 'auto'}
+   >
       <sphereGeometry args={[RADIUS, 64, 64]} />
       <meshStandardMaterial 
-        map={moonTexture} 
-        bumpMap={moonTexture} 
-        bumpScale={0.035} 
-        roughness={0.82}
-        metalness={0.08}
+        map={colorMap} 
+        bumpMap={colorMap} 
+        bumpScale={0.02} 
+        roughness={0.8}
+        metalness={0.1}
       />
     </mesh>
   );
@@ -46,7 +44,7 @@ const [ringPositions, ringColors, ringRandoms] = (() => {
   const col = new Float32Array(particlesCount * 3);
   const rnd = new Float32Array(particlesCount);
 
-  for (let i = 0; i < particlesCount; i++) {
+  for(let i=0; i<particlesCount; i++) {
     const angle = Math.random() * Math.PI * 2;
 
     const rDist = Math.pow(Math.random(), 1.5);
@@ -56,9 +54,9 @@ const [ringPositions, ringColors, ringRandoms] = (() => {
     const ySpread = (Math.random() + Math.random() + Math.random() - 1.5);
     const y = ySpread * thickness; 
 
-    pos[i * 3] = Math.cos(angle) * radius;
-    pos[i * 3 + 1] = y;
-    pos[i * 3 + 2] = Math.sin(angle) * radius;
+    pos[i*3] = Math.cos(angle) * radius;
+    pos[i*3+1] = y;
+    pos[i*3+2] = Math.sin(angle) * radius;
 
     const intensity = 1.0 - rDist; 
 
@@ -79,27 +77,21 @@ const [ringPositions, ringColors, ringRandoms] = (() => {
 
     const sparkle = Math.random() > 0.95 ? 2.5 : 1.0;
 
-    col[i * 3] = baseR * intensity * sparkle;     
-    col[i * 3 + 1] = baseG * intensity * sparkle;   
-    col[i * 3 + 2] = baseB * intensity * sparkle;   
+    col[i*3] = baseR * intensity * sparkle;     
+    col[i*3+1] = baseG * intensity * sparkle;   
+    col[i*3+2] = baseB * intensity * sparkle;   
     rnd[i] = Math.random();
   }
   return [pos, col, rnd];
 })();
 
-const ParticleRing = ({
-  ringState,
-  massiveAsteroidsRef,
-}: {
-  ringState: "hidden" | "animating" | "visible";
-  massiveAsteroidsRef: React.MutableRefObject<Float32Array>;
-}) => {
+const ParticleRing = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' | 'animating' | 'visible', massiveAsteroidsRef: React.MutableRefObject<Float32Array> }) => {
   const pointsRef = useRef<THREE.Points>(null);
 
   const uniforms = useRef({
-    uProgress: { value: ringState === "visible" ? 1.0 : 0.0 },
+    uProgress: { value: ringState === 'visible' ? 1.0 : 0.0 },
     uAsteroids: { value: new Float32Array(75 * 4) },
-    time: { value: 0 },
+    time: { value: 0 }
   });
 
   useFrame((state, delta) => {
@@ -109,26 +101,26 @@ const ParticleRing = ({
 
       const invMat = new THREE.Matrix4().copy(pointsRef.current.matrix).invert();
       const localAsteroids = new Float32Array(75 * 4);
-      for (let i = 0; i < 75; i++) {
+      for(let i=0; i<75; i++) {
         const ast = new THREE.Vector3(
-          massiveAsteroidsRef.current[i * 4],
-          massiveAsteroidsRef.current[i * 4 + 1],
-          massiveAsteroidsRef.current[i * 4 + 2]
+          massiveAsteroidsRef.current[i*4],
+          massiveAsteroidsRef.current[i*4+1],
+          massiveAsteroidsRef.current[i*4+2]
         );
         ast.applyMatrix4(invMat);
-        localAsteroids[i * 4] = ast.x;
-        localAsteroids[i * 4 + 1] = ast.y;
-        localAsteroids[i * 4 + 2] = ast.z;
-        localAsteroids[i * 4 + 3] = massiveAsteroidsRef.current[i * 4 + 3];
+        localAsteroids[i*4] = ast.x;
+        localAsteroids[i*4+1] = ast.y;
+        localAsteroids[i*4+2] = ast.z;
+        localAsteroids[i*4+3] = massiveAsteroidsRef.current[i*4+3];
       }
       uniforms.current.uAsteroids.value = localAsteroids;
     }
-    uniforms.current.time.value += delta;
+    uniforms.current.time.value = state.clock.elapsedTime;
 
-    if (ringState === "animating") {
+    if (ringState === 'animating') {
       uniforms.current.uProgress.value += delta * 0.35; 
       if (uniforms.current.uProgress.value > 1.0) uniforms.current.uProgress.value = 1.0;
-    } else if (ringState === "visible") {
+    } else if (ringState === 'visible') {
       uniforms.current.uProgress.value = 1.0;
     } else {
       uniforms.current.uProgress.value = 0.0;
@@ -269,22 +261,20 @@ const generateAsteroids = (count: number) => {
       angle, baseRadius, radialAmplitude, radialSpeed, phase, zOffset, speed,
       rx: Math.random() * Math.PI, ry: Math.random() * Math.PI, rz: Math.random() * Math.PI,
       rsx: rotationSpeedX, rsy: rotationSpeedY, rsz: rotationSpeedZ,
-      scale,
+      scale
     });
   }
   data.sort((a, b) => b.scale - a.scale);
   return data;
 };
 
-const AsteroidBelt = ({
-  ringState,
-  massiveAsteroidsRef,
-}: {
-  ringState: "hidden" | "animating" | "visible";
-  massiveAsteroidsRef: React.MutableRefObject<Float32Array>;
-}) => {
+const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' | 'animating' | 'visible', massiveAsteroidsRef: React.MutableRefObject<Float32Array> }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const moonTexture = useTexture('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg');
+
+  const [colorMap, bumpMap] = useTexture([
+    'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg',
+    'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg'
+  ]);
 
   const count = 75; 
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -296,8 +286,8 @@ const AsteroidBelt = ({
   useFrame((state, delta) => {
     if (!meshRef.current) return;
 
-    const targetScale = ringState === "hidden" ? 0 : 1;
-    const lerpSpeed = ringState === "hidden" ? 5 : 2;
+    const targetScale = ringState === 'hidden' ? 0 : 1;
+    const lerpSpeed = ringState === 'hidden' ? 5 : 2;
     scaleRef.current = THREE.MathUtils.lerp(scaleRef.current, targetScale, delta * lerpSpeed);
 
     if (scaleRef.current < 0.01) {
@@ -307,7 +297,9 @@ const AsteroidBelt = ({
     meshRef.current.visible = true;
 
     asteroids.forEach((ast, i) => {
+
       ast.angle += ast.speed * delta; 
+
       ast.phase += ast.radialSpeed * delta;
       let currentRadius = ast.baseRadius + Math.sin(ast.phase) * ast.radialAmplitude;
 
@@ -343,8 +335,8 @@ const AsteroidBelt = ({
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} castShadow receiveShadow>
       <dodecahedronGeometry args={[1, 0]} />
       <meshStandardMaterial 
-        map={moonTexture} 
-        bumpMap={moonTexture} 
+        map={colorMap} 
+        bumpMap={bumpMap} 
         bumpScale={0.08}
         color="#ffffff"
         roughness={0.7}
@@ -392,23 +384,21 @@ export default function LunarGravityCard({
      
       <div className="relative md:absolute md:right-0 md:top-0 w-full h-[450px] md:h-full md:w-[65%] pointer-events-auto z-0 flex items-center justify-center cursor-pointer">
         <div className="absolute inset-0 w-full h-full">
-          <Canvas
-            shadows={{ type: THREE.PCFShadowMap }}
-            gl={{ powerPreference: "high-performance", antialias: true }}
-            camera={{ position: [0, 4, 10], fov: 45 }}
-            dpr={[1, 2]}
-          >
-            <ambientLight intensity={0.2} />
-            <directionalLight position={[8, 5, 5]} intensity={1.8} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
-            <directionalLight position={[-5, -3, -5]} intensity={0.35} color="#8a60e2" />
+          <Canvas shadows camera={{ position: [0, 4, 10], fov: 45 }} dpr={[1, 2]}>
+            <Environment preset="city" />
+
+            <ambientLight intensity={0.02} />
+            <directionalLight position={[8, 5, 5]} intensity={1.5} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
+            <directionalLight position={[-5, -3, -5]} intensity={0.15} color="#4a90e2" />
 
             <OrbitControls enableZoom={false} enablePan={false} autoRotate={false} />
 
             <group rotation={[Math.PI / 8, 0, 0]}>
               <Suspense fallback={null}>
-                <RealisticMoon onClick={() => { if (ringState === 'hidden') setRingState('animating'); }} />
+                <RealisticMoon onClick={() => { if(ringState === 'hidden') setRingState('animating') }} />
                 <ParticleRing ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
                 <AsteroidBelt ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
+                <Environment preset="city" />
               </Suspense>
             </group>
           </Canvas>
