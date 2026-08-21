@@ -81,12 +81,15 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
       if (response.memories_created && response.memories_created.length > 0) {
         setRefreshTrigger((prev) => prev + 1);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error:", error);
+      const isAuthErr = error?.message?.toLowerCase().includes("token") || error?.message?.toLowerCase().includes("unauthorized");
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: "assistant",
-        content: "Sorry, I encountered an error communicating with the memory system. Please ensure the backend is running.",
+        content: isAuthErr
+          ? "Authentication token is missing or expired. Please sign out and sign in with your credentials to connect with the memory graph."
+          : `Error from memory engine: ${error?.message || "Failed to communicate with backend. Please ensure the backend is running on port 8000."}`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
