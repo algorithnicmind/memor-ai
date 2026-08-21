@@ -2,7 +2,7 @@
 
 import React, { useRef, useMemo, Suspense, useState, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Environment } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { cn } from "@/lib/utils";
 
@@ -478,7 +478,6 @@ export default function LunarGravityCard({
             camera={{ position: [0, 1.5, 10], fov: 45 }}
             dpr={[1, 2]}
           >
-            <Environment preset="city" />
             <ambientLight intensity={0.01} />
             <directionalLight position={[10, 0, 5]} intensity={2.0} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
             <directionalLight position={[-10, -5, -5]} intensity={0.1} color="#4a90e2" />
