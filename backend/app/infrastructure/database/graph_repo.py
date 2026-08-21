@@ -82,7 +82,17 @@ class GraphStore:
         self.embedding_dims = self.embedder.embedding_dims
         self.llm = OpenAICompatibleLLM(provider)
 
-        self.db = ladybug.Database(self.config.db_path)
+        try:
+            self.db = ladybug.Database(self.config.db_path)
+        except Exception as e:
+            if "wal" in str(e).lower() or "corrupt" in str(e).lower():
+                logger.warning("Detected corrupted graph WAL file (%s), auto-recovering...", e)
+                wal_path = Path(f"{self.config.db_path}.wal")
+                if wal_path.exists():
+                    wal_path.unlink(missing_ok=True)
+                self.db = ladybug.Database(self.config.db_path)
+            else:
+                raise
         self.graph = ladybug.Connection(self.db)
 
         self.node_label = ":Entity"
