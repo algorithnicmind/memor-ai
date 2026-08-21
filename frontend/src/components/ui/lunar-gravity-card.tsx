@@ -387,12 +387,13 @@ export default function LunarGravityCard({
      
       <div className="relative md:absolute md:right-0 md:top-0 w-full h-[450px] md:h-full md:w-[65%] pointer-events-auto z-0 flex items-center justify-center cursor-pointer">
         <div className="absolute inset-0 w-full h-full">
-          <Canvas shadows camera={{ position: [0, 4, 10], fov: 45 }} dpr={[1, 2]}>
+          <Canvas shadows camera={{ position: [0, 0, 10], fov: 45 }} dpr={[1, 2]}>
             {/* Environment removed for offline stability */}
 
-            <ambientLight intensity={0.02} />
-            <directionalLight position={[8, 5, 5]} intensity={1.5} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
-            <directionalLight position={[-5, -3, -5]} intensity={0.15} color="#4a90e2" />
+            <ambientLight intensity={0.8} color="#e0e5ff" />
+            <directionalLight position={[8, 5, 5]} intensity={2.5} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
+            <directionalLight position={[-5, 5, -5]} intensity={1.0} color="#8ab4f8" />
+            <directionalLight position={[0, -5, 0]} intensity={0.5} color="#4a90e2" />
 
             <OrbitControls enableZoom={false} enablePan={false} autoRotate={false} />
 
