@@ -14,7 +14,7 @@ import { Brain, PanelLeftOpen, Sparkles } from "lucide-react";
 import { SettingsModal } from "@/components/ui/settings-modal";
 import { ProfileModal } from "@/components/ui/profile-modal";
 import { MemoryDashboardModal } from "@/components/ui/memory-dashboard-modal";
-
+import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button";
 interface ChatInterfaceProps {
   userId: string;
   onLogout: () => void;
@@ -237,10 +237,10 @@ export function ChatInterface({ userId, onLogout }: ChatInterfaceProps) {
 
 function EmptyState({ onSelectPrompt }: { onSelectPrompt: (prompt: string) => void }) {
   const starterPrompts = [
-    "Help me plan my AI/ML roadmap",
-    "Remember my project requirements",
-    "Explain this concept simply",
-    "Help me organize my goals"
+    { text: "Help me plan my AI/ML roadmap", img: "/ml_roadmap.jpg" },
+    { text: "Remember my project requirements", img: "/project_requirements.jpg" },
+    { text: "Explain this concept simply", img: "/explain_concept.jpg" },
+    { text: "Help me organize my goals", img: "/organize_goals.jpg" }
   ];
 
   return (
@@ -280,18 +280,19 @@ function EmptyState({ onSelectPrompt }: { onSelectPrompt: (prompt: string) => vo
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
         {starterPrompts.map((prompt, idx) => (
-          <motion.button
+          <motion.div
             key={idx}
-            onClick={() => onSelectPrompt(prompt)}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 + idx * 0.08 }}
-            className="p-4 rounded-2xl bg-zinc-900/60 backdrop-blur-xl border border-white/[0.08] shadow-lg flex items-center justify-between text-left hover:bg-zinc-800/80 hover:border-purple-500/40 transition-all group"
           >
-            <span className="text-sm text-zinc-300 font-medium group-hover:text-white transition-colors leading-snug">
-              {prompt}
-            </span>
-          </motion.button>
+            <InteractiveHoverButton
+              text={prompt.text}
+              imgSrc={prompt.img}
+              onClick={() => onSelectPrompt(prompt.text)}
+              className="w-full h-full"
+            />
+          </motion.div>
         ))}
       </div>
     </motion.div>
