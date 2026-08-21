@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
-import { Message, MemoryUsed, RelationUsed } from "@/lib/types";
+import { Message } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Brain, User, Sparkles, Link2, Info, ChevronDown, ChevronUp } from "lucide-react";

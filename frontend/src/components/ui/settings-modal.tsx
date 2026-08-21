@@ -1,6 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Moon, Sun, Monitor, Brain, Shield, Bell } from "lucide-react";
+import { X, Monitor, Brain, Shield, Bell } from "lucide-react";
 
 interface SettingsModalProps {
   isOpen: boolean;

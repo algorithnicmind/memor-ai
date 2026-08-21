@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Brain, Trash2, RefreshCw, X, User, Target, Code, Heart, CheckSquare, Folder, Network } from "lucide-react";
+import { Brain, Trash2, RefreshCw, X, User, Target, Code, Heart, Network } from "lucide-react";
 import { Memory } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
