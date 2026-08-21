@@ -11,6 +11,7 @@ const RADIUS = 2.0;
 const RealisticMoon = ({ onClick }: { onClick?: () => void }) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
+  // Using local public texture instead of github URL to prevent network blocking crashes
   const colorMap = useTexture("/moon.jpg");
 
   useFrame((_, delta) => {
@@ -271,6 +272,7 @@ const generateAsteroids = (count: number) => {
 const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' | 'animating' | 'visible', massiveAsteroidsRef: React.MutableRefObject<Float32Array> }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
+  // Using local public texture instead of github URL to prevent network blocking crashes
   const [colorMap, bumpMap] = useTexture([
     '/moon.jpg',
     '/moon.jpg'
@@ -333,6 +335,7 @@ const AsteroidBelt = ({ ringState, massiveAsteroidsRef }: { ringState: 'hidden' 
 
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]} castShadow receiveShadow>
+
       <dodecahedronGeometry args={[1, 0]} />
       <meshStandardMaterial 
         map={colorMap} 
@@ -356,14 +359,14 @@ export default function LunarGravityCard({
   className,
   title = (
     <>
-      <span className="text-zinc-50 drop-shadow-sm">Memorai</span>
+      <span className="text-zinc-50 drop-shadow-sm">Lunar</span>
       <br />
       <span className="text-transparent bg-clip-text bg-gradient-to-b from-white via-zinc-400 to-zinc-800 drop-shadow-md">
-        Memory.
+        Gravity.
       </span>
     </>
   ),
-  description = "An intelligent assistant with persistent memory. Click the moon to explore the ecosystem."
+  description = "Embed highly realistic astrophysics directly into your Next.js project. Zero configuration, fully interactive, and flawlessly smooth."
 }: LunarGravityCardProps) {
   const [ringState, setRingState] = useState<'hidden' | 'animating' | 'visible'>('hidden');
   const massiveAsteroidsRef = useRef<Float32Array>(new Float32Array(75 * 4));
@@ -385,7 +388,7 @@ export default function LunarGravityCard({
       <div className="relative md:absolute md:right-0 md:top-0 w-full h-[450px] md:h-full md:w-[65%] pointer-events-auto z-0 flex items-center justify-center cursor-pointer">
         <div className="absolute inset-0 w-full h-full">
           <Canvas shadows camera={{ position: [0, 4, 10], fov: 45 }} dpr={[1, 2]}>
-
+            {/* Environment removed for offline stability */}
 
             <ambientLight intensity={0.02} />
             <directionalLight position={[8, 5, 5]} intensity={1.5} color="#ffffff" castShadow shadow-mapSize={[2048, 2048]} />
@@ -398,7 +401,6 @@ export default function LunarGravityCard({
                 <RealisticMoon onClick={() => { if(ringState === 'hidden') setRingState('animating') }} />
                 <ParticleRing ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
                 <AsteroidBelt ringState={ringState} massiveAsteroidsRef={massiveAsteroidsRef} />
-
               </Suspense>
             </group>
           </Canvas>
